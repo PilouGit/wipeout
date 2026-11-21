@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#07030f">
+  <title>Hyperglide</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 L28 28 L16 22 L4 28 Z' fill='%232ef2ff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="hud">
+    <div id="tl" class="panel">
+      <div><div class="label">POSITION</div><div class="big" id="pos">6<small>/6</small></div></div>
+      <div><div class="label">TOUR</div><div class="big" id="lap">1<small>/3</small></div></div>
+    </div>
+    <div id="tr" class="panel">
+      <div class="label">TEMPS</div>
+      <div id="time">0:00.000</div>
+      <div id="laps"></div>
+      <div id="best"></div>
+    </div>
+    <div id="bl" class="panel">
+      <div class="label">ARME</div>
+      <div id="item">—</div>
+    </div>
+    <div id="bc" class="panel">
+      <div id="speed">0<span>KM/H</span></div>
+      <div class="bar"><div id="speedbar"></div></div>
+      <div class="row"><span class="label">BOUCLIER</span><span class="label" id="energyTxt">100%</span></div>
+      <div class="bar"><div id="energybar"></div></div>
+    </div>
+    <div id="mapwrap" class="panel"><canvas id="minimap"></canvas></div>
+    <div id="wrong">MAUVAIS SENS</div>
+    <div id="msg"></div>
+    <div id="sub"></div>
+  </div>
+
+  <div id="menu" class="overlay">
+    <div class="card wide">
+      <h1>HYPERGLIDE</h1>
+      <div class="tag">COURSE ANTI-GRAVITÉ</div>
+      <div class="section">CIRCUIT</div>
+      <div id="circuits" class="picker"></div>
+      <div class="section">ÉCURIE</div>
+      <div id="teams" class="picker teams"></div>
+      <div id="teamInfo" class="team-info"></div>
+      <div class="launch">
+        <div class="diffs">
+          <button data-d="novice">NOVICE</button>
+          <button data-d="pro">PRO</button>
+          <button data-d="elite">ÉLITE</button>
+        </div>
+        <button class="go" id="startBtn">COURSE</button>
+      </div>
+      <details class="help">
+        <summary>COMMANDES</summary>
+        <div class="controls touch-only">
+          <b>POUCE GAUCHE</b><span>Glisser à gauche / droite pour diriger (n'importe où sur la moitié gauche)</span>
+          <b>◀ AÉRO / AÉRO ▶</b><span>Aérofreins — indispensables dans les épingles</span>
+          <b>FREIN</b><span>L'accélération est automatique ; maintenir pour freiner</span>
+          <b>ARME</b><span>Utiliser l'arme ramassée sur les pads violets</span>
+          <b>II</b><span>Pause</span>
+        </div>
+        <div class="controls desktop-only">
+          <b>↑ / ↓</b><span>Accélérer / Freiner</span>
+          <b>← / →</b><span>Diriger</span>
+          <b>A (Q) / E</b><span>Aérofrein gauche / droit — indispensable dans les épingles</span>
+          <b>ESPACE</b><span>Utiliser l'arme ramassée sur les pads violets</span>
+          <b>C</b><span>Changer de caméra</span>
+          <b>ÉCHAP · M</b><span>Pause · Son on/off</span>
+          <b>MANETTE</b><span>Stick, RT/LT, LB/RB, A ou X</span>
+        </div>
+        <div class="hint">Les chevrons donnent un boost. Le bouclier se recharge après la ligne d'arrivée. Dans les loopings et tire-bouchons, la piste est magnétique : gardez les gaz.</div>
+      </details>
+    </div>
+  </div>
+
+  <div id="pause" class="overlay hidden">
+    <div class="card">
+      <h2>PAUSE</h2>
+      <div class="diffs">
+        <button id="resumeBtn">REPRENDRE</button>
+        <button id="restartBtn">RECOMMENCER</button>
+        <button id="menuBtn">MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="results" class="overlay hidden">
+    <div class="card">
+      <h2 id="resTitle">RÉSULTATS</h2>
+      <table id="resTable"></table>
+      <div id="resLaps" class="hint laps-summary"></div>
+      <div class="diffs">
+        <button class="go" id="againBtn">REJOUER</button>
+        <button id="menuBtn2">MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="rotate"><div>⟳</div>Tournez votre téléphone en paysage</div>
+
+  <div id="err" class="overlay hidden">
+    <div class="card"><h2>Oups</h2><p>Impossible de démarrer le moteur 3D (WebGL indisponible ?).</p></div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
