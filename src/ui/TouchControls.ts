@@ -20,12 +20,13 @@ export class TouchControls {
   private steerOrigin = 0;
   private lastItem: string | null | undefined;
 
-  constructor(private readonly state: TouchState, actions: { fire(): void; pause(): void }) {
+  constructor(private readonly state: TouchState, actions: { fire(): void; pulse(): void; pause(): void }) {
     const root = (this.root = document.createElement('div'));
     root.id = 'touch';
     root.innerHTML = `
       <div class="t-steer"><div class="t-base"><div class="t-knob"></div></div><span class="t-hint">◀ DIRIGER ▶</span></div>
       <button class="t-btn t-fire" data-k="fire"><span>ARME</span><b>—</b></button>
+      <button class="t-btn t-pulse" data-k="pulse">♪</button>
       <button class="t-btn t-brake" data-k="brake">FREIN</button>
       <button class="t-btn t-abl" data-k="abl">◀ AÉRO</button>
       <button class="t-btn t-abr" data-k="abr">AÉRO ▶</button>
@@ -77,6 +78,7 @@ export class TouchControls {
         b.setPointerCapture(e.pointerId);
         b.classList.add('down');
         if (k === 'fire') actions.fire();
+        else if (k === 'pulse') actions.pulse();
         else if (k === 'pause') actions.pause();
         else held[k].add(e.pointerId);
         sync();

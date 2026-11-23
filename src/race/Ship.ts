@@ -1,4 +1,5 @@
 import type { Difficulty } from '../config';
+import type { BeatSample } from './Groove';
 import { performance, type Performance, type Team } from './teams';
 
 export type ItemKind = 'TURBO' | 'IMPULSION' | 'MINES' | 'BOUCLIER';
@@ -14,10 +15,17 @@ export interface ShipInput {
   airbrakeRight: number;
   /** Demande d'utilisation de l'arme (consommée par la course). */
   fire: boolean;
+  /** Touche de rythme (consommée par la course). */
+  pulse?: boolean;
+  /**
+   * Position musicale entendue au moment exact de l'appui : le jugement ne dépend pas de la
+   * cadence d'images (absent = jugé au pas de simulation).
+   */
+  pulseBeat?: BeatSample | null;
 }
 
 export function createInput(): ShipInput {
-  return { thrust: 0, brake: 0, steer: 0, airbrakeLeft: 0, airbrakeRight: 0, fire: false };
+  return { thrust: 0, brake: 0, steer: 0, airbrakeLeft: 0, airbrakeRight: 0, fire: false, pulse: false };
 }
 
 /**
@@ -53,6 +61,11 @@ export class Ship {
   scrape = 0;
   /** Multiplicateur de vitesse de pointe (niveau IA, élastique). */
   vmaxMul = 1;
+  /** Hauteur de vol au-dessus de la sustentation normale (m) et vitesse verticale (m/s), le long de la normale. */
+  h = 0;
+  vh = 0;
+  /** Vitesse verticale à l'atterrissage du dernier pas (0 sinon) : secousse, étincelles. */
+  landImpact = 0;
 
   lapsDone = -1;
   lapStart = 0;
@@ -90,6 +103,7 @@ export class Ship {
     this.boostTime = this.shieldTime = this.stunTime = this.wallCooldown = 0;
     this.spin = this.scrape = 0;
     this.vmaxMul = 1;
+    this.h = this.vh = this.landImpact = 0;
     this.lapsDone = Math.floor(s / trackLength);
     this.lapStart = 0;
     this.lapTimes = [];
@@ -98,11 +112,15 @@ export class Ship {
     this.dead = false;
     this.lastPadId = -1;
     this.lastPadTime = -Infinity;
-    Object.assign(this.input, { thrust: 0, brake: 0, steer: 0, airbrakeLeft: 0, airbrakeRight: 0, fire: false });
+    Object.assign(this.input, { thrust: 0, brake: 0, steer: 0, airbrakeLeft: 0, airbrakeRight: 0, fire: false, pulse: false });
   }
 
   get speed(): number {
     return Math.abs(this.u);
+  }
+
+  get airborne(): boolean {
+    return this.h > 0;
   }
 
   get stunned(): boolean {

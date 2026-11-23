@@ -270,6 +270,36 @@ class Lead extends BaseInstrument {
 
 // ------------------------------------------------------------------ effets
 
+/**
+ * Rugissement de dragon : scies désaccordées saturées, hauteur qui plonge en fin de note,
+ * filtre passe-bande « gorge » modulé par un trémolo rugueux.
+ */
+class Growl extends BaseInstrument {
+  play(t: number, n: number, v: number, dur: number): void {
+    const g = this.gain();
+    const end = adsr(g.gain, t, vel(v) * 0.16, 0.03, dur, 0.25, 0.85);
+    const freq = mtof(n);
+    const f = this.filter('bandpass', 500 + this.brightness * 8, 1.6);
+    f.frequency.setValueAtTime(380, t);
+    f.frequency.exponentialRampToValueAtTime(900 + this.brightness * 10, t + Math.min(0.12, dur * 0.4));
+    f.frequency.exponentialRampToValueAtTime(320, end);
+    const rough = this.osc('square', 31, t, end);
+    const roughDepth = this.gain();
+    roughDepth.gain.value = vel(v) * 0.07;
+    rough.connect(roughDepth).connect(g.gain);
+    const drive = this.shaper();
+    for (const d of [-22, 0, 19]) {
+      const o = this.osc('sawtooth', freq, t, end, d);
+      // la note s'effondre d'une quarte en fin de souffle
+      o.frequency.setValueAtTime(freq, t + dur * 0.6);
+      o.frequency.exponentialRampToValueAtTime(freq * 0.75, end);
+      o.connect(drive);
+    }
+    drive.connect(f).connect(g).connect(this.output);
+  }
+}
+
+
 /** Montée de bruit filtré sur toute la durée de la note. */
 class Riser extends BaseInstrument {
   play(t: number, _n: number, v: number, dur: number): void {
@@ -323,5 +353,6 @@ export function createInstrument(id: InstrumentId, ctx: BaseAudioContext, output
     case 'riser': return new Riser(ctx, output, shared);
     case 'impact': return new Impact(ctx, output, shared);
     case 'alarm': return new Alarm(ctx, output, shared);
+    case 'growl': return new Growl(ctx, output, shared);
   }
 }

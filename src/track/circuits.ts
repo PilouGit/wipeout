@@ -31,35 +31,35 @@ export interface Circuit {
 // ------------------------------------------------------------------ Neon Ridge : la ville
 
 function neonRidge(): TrackLayout {
-  const b = new LayoutBuilder()
+  const b = new LayoutBuilder(2)
     .to(0, 0, 0).to(180, 2, 0).to(330, 4, -10).colonnade(1).to(450, 12, -80).to(490, 26, -230).to(400, 36, -370)
     .to(240, 26, -360);
   const t0 = b.here();
   b.to(130, 10, -440).to(150, 0, -590).tunnel(t0)
-    .to(300, -8, -680).to(460, 4, -650).to(570, 30, -760).to(520, 52, -910).to(320, 44, -970).to(80, 24, -920)
-    .to(-140, 6, -820).to(-260, -6, -620).to(-210, 8, -420).to(-310, 22, -250).to(-260, 12, -90).to(-130, 2, -5);
+    .to(300, -8, -680).to(460, 4, -650).to(570, 30, -760).to(520, 52, -910).to(320, 44, -970).jumpTo(80, 24, -920)
+    .to(-140, 6, -820).jumpTo(-260, -6, -620).to(-210, 8, -420).to(-310, 22, -250).to(-260, 12, -90).to(-130, 2, -5);
   return b.build();
 }
 
 // ------------------------------------------------------------------ Glacier Vault : montagne, looping, long tunnel
 
 function glacierVault(): TrackLayout {
-  const b = new LayoutBuilder()
+  const b = new LayoutBuilder(2.2)
     .to(0, 0, 0).to(170, 0, 0)
     .loop({ radius: 36, offset: 32, side: 1 })
-    .to(460, 8, 54).to(630, 18, 12).to(720, 26, -130).to(700, 34, -310);
+    .jumpTo(460, 8, 54).to(630, 18, 12).to(720, 26, -130).to(700, 34, -310);
   const t0 = b.here();
   b.to(565, 30, -420).to(385, 18, -455).to(205, 6, -430).tunnel(t0);
   const c0 = b.here();
-  b.to(35, -4, -490).to(-145, 6, -575).colonnade(c0).to(-335, 20, -530).to(-420, 24, -360).to(-375, 14, -180).to(-205, 4, -48);
+  b.to(35, -4, -490).to(-145, 6, -575).colonnade(c0).to(-335, 20, -530).to(-420, 24, -360).to(-375, 14, -180).jumpTo(-205, 4, -48);
   return b.build();
 }
 
 // ------------------------------------------------------------------ Magma Rift : volcan, tire-bouchon, coulée en tunnel, looping
 
 function magmaRift(): TrackLayout {
-  const b = new LayoutBuilder()
-    .to(0, 0, 0).to(160, 0, 0)
+  const b = new LayoutBuilder(2.2)
+    .to(0, 0, 0).jumpTo(160, 0, 0, 4)
     .corkscrew({ length: 260, dir: 1, lead: 60 })
     .to(650, 8, -40).to(720, 20, -170).to(650, 30, -320).to(530, 36, -400).to(380, 30, -420);
   const t0 = b.here();
@@ -74,10 +74,11 @@ function magmaRift(): TrackLayout {
 // ------------------------------------------------------------------ Selene Orbital : base lunaire, tout à la fois
 
 function seleneOrbital(): TrackLayout {
-  const b = new LayoutBuilder().to(0, 0, 0).to(150, 0, 0);
+  // le tunnel commence après la zone de réception du tremplin
+  const b = new LayoutBuilder(3).to(0, 0, 0).jumpTo(150, 0, 0, 4).to(300, -4, -30);
   const t0 = b.here();
-  b.to(300, -4, -30).to(420, -6, -110).tunnel(t0)
-    .to(470, 0, -240).to(440, 8, -370).to(425, 10, -450)
+  b.to(420, -6, -110).to(470, 0, -240).tunnel(t0)
+    .to(440, 8, -370).to(425, 10, -450)
     .loop({ radius: 38, offset: 32, side: -1 })
     .to(330, 12, -640).to(190, 12, -680)
     .corkscrew({ length: 260, dir: -1, lead: 60 })
@@ -94,7 +95,7 @@ export const CIRCUITS: readonly Circuit[] = [
     id: 'neon',
     name: 'NEON RIDGE',
     location: 'Mégapole · nuit',
-    features: ['TUNNEL', 'COLONNADE', 'DÉNIVELÉ'],
+    features: ['TUNNEL', 'TREMPLINS', 'DÉNIVELÉ'],
     layout: neonRidge(),
     theme: {
       sky: [0x6b1750, 0x120424, 0x020108], fog: 0x210924, fogDensity: 0.0011, ground: 0x07030f,

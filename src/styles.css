@@ -157,6 +157,11 @@ details.help summary { cursor: pointer; font-size: 11px; letter-spacing: 3px; op
 #audioDebug .ad-options, #audioDebug .ad-bench { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, .08); }
 #audioDebug .ad-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 8px 0; }
 #audioDebug .ad-buttons button { font-size: 9px; padding: 6px 2px; letter-spacing: 1px; }
+#audioDebug .ad-music { padding: 2px 0 6px; margin-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+#audioDebug .ad-music-info { font: 12px 'Segoe UI', system-ui, sans-serif; }
+#audioDebug .ad-music .ad-buttons { grid-template-columns: 28px 1fr 28px 1fr 1fr; align-items: center; }
+#audioDebug .ad-music input[type=number] { width: 100%; min-width: 0; font: 11px ui-monospace, Consolas, monospace; background: rgba(255, 255, 255, .06); color: inherit; border: 1px solid rgba(255, 255, 255, .15); border-radius: 4px; padding: 4px; }
+#audioDebug .ad-hint { opacity: .6; font: 10px 'Segoe UI', system-ui, sans-serif; }
 #audioDebug canvas { display: block; width: 280px; height: 280px; border-radius: 6px; margin: 0 auto; }
 #audioDebug .ad-legend { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 4px 0; font: 11px 'Segoe UI', system-ui, sans-serif; }
 #audioDebug .ad-readout { margin: 4px 0 0; font: 11px ui-monospace, Consolas, monospace; white-space: pre; opacity: .9; }
@@ -203,6 +208,7 @@ body.touch button { touch-action: manipulation; -webkit-tap-highlight-color: tra
 .t-fire span { font-size: 9px; opacity: .7; }
 .t-fire b { font-size: 9px; color: var(--yellow); margin-top: 2px; max-width: 74px; overflow: hidden; text-overflow: ellipsis; }
 .t-fire:not(.armed) { opacity: .5; }
+.t-pulse { width: 64px; height: 64px; right: calc(var(--pad-r) + 140px); bottom: calc(var(--pad-b) + 150px); font-size: 24px; border-color: rgba(255, 63, 180, .6); }
 .t-fire.armed { box-shadow: 0 0 18px rgba(255, 211, 77, .6); border-color: var(--yellow); }
 .t-pause {
   width: 44px; height: 44px; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
@@ -258,3 +264,19 @@ body.touch #wrong { font-size: 22px; }
 @media (orientation: portrait) {
   body.touch.racing #rotate { display: flex; }
 }
+
+/* indicateur de rythme : pulse à chaque temps, accent sur le premier ; série d'actions sur le temps */
+#beat {
+  position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%);
+  display: flex; gap: 10px; align-items: center; pointer-events: none;
+  font: 700 13px/1 inherit; letter-spacing: .12em; color: #ff8ad6;
+}
+#beat i {
+  width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(255, 138, 214, .55);
+  transition: background .06s, box-shadow .06s;
+}
+#beat i.on { background: #ff3fb4; box-shadow: 0 0 14px #ff3fb4; border-color: #ff3fb4; }
+#beat i.down.on { background: #fff; box-shadow: 0 0 18px #fff; border-color: #fff; }
+#beat b { min-width: 64px; text-align: left; opacity: 0; transition: opacity .2s; }
+#beat b.show { opacity: 1; }
+body.touch #beat { bottom: 96px; }

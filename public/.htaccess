@@ -1,0 +1,23 @@
+# Servi depuis /var/www/wipeout (copié tel quel dans dist/ par Vite)
+
+Options -Indexes
+
+<IfModule mod_mime.c>
+  AddType text/javascript .js .mjs
+  AddType application/wasm .wasm
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json image/svg+xml
+</IfModule>
+
+<IfModule mod_headers.c>
+  # index.html : toujours revalidé, pour récupérer la nouvelle version après un déploiement
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  # Fichiers de assets/ : noms hachés par Vite, donc cache long
+  <FilesMatch "-[A-Za-z0-9_-]{8}\.(js|css|png|jpg|svg|woff2?|ogg|mp3|wav)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>

@@ -34,8 +34,27 @@ export class LayoutBuilder {
   private readonly points: ControlPoint[] = [];
   private readonly zones: ZoneSpec[] = [];
 
+  /** `relief` multiplie les altitudes données à `to` / `jumpTo` (accentue le dénivelé). */
+  constructor(private readonly relief = 1) {}
+
   to(x: number, y: number, z: number): this {
-    this.points.push([x, y, z]);
+    this.points.push([x, round(y * this.relief), z]);
+    return this;
+  }
+
+  /**
+   * Ligne droite jusqu'à (x, y, z) avec un tremplin au milieu : rampe de `kick` m,
+   * puis une descente plus longue où les vaisseaux lancés décollent.
+   */
+  jumpTo(x: number, y: number, z: number, kick = 6): this {
+    const a = v3(this.points[this.points.length - 1]);
+    const b = new Vector3(x, y * this.relief, z);
+    const at = (f: number, lift: number) => cp(a.clone().lerp(b, f).addScaledVector(UP, lift));
+    this.points.push(at(0.3, 0));
+    const from = this.here();
+    this.points.push(at(0.47, kick), at(0.75, -kick * 0.35));
+    this.zones.push({ kind: 'jump', from, to: this.here() });
+    this.points.push(cp(b));
     return this;
   }
 

@@ -2,8 +2,8 @@ import { Fade, FADE_HZ } from './Fade';
 import { GroupVolumes } from './GroupVolumes';
 import { Player, type PlayerHost } from './Player';
 import {
-  MAX_VOLUME,
-  type Command, type FadeParam, type MusicalPosition, type MusicOutput, type SoundFile, type VolumeGroup,
+  BEATS_PER_BAR, MAX_VOLUME, TICKS_PER_BEAT,
+  type Command, type FadeParam, type MusicalClock, type MusicalPosition, type MusicOutput, type SoundFile, type VolumeGroup,
 } from './types';
 
 /** Avance de planification : les notes sont envoyées à Web Audio un peu en avance. */
@@ -82,6 +82,24 @@ export class IMuse implements PlayerHost {
 
   position(sound: number): MusicalPosition | null {
     return this.players.get(sound)?.position() ?? null;
+  }
+
+  /**
+   * Horloge musicale d'un son à l'instant audio `at` (par défaut : maintenant) : sert aux visuels
+   * synchronisés sur le tempo. null si le son ne joue pas.
+   */
+  clock(sound: number, at = this.output.now()): MusicalClock | null {
+    const p = this.players.get(sound);
+    if (!p) return null;
+    const ticks = p.ticksAt(at);
+    const beats = ticks / TICKS_PER_BEAT;
+    return {
+      chunk: p.chunkId,
+      beat: ((beats % BEATS_PER_BAR) + BEATS_PER_BAR) % BEATS_PER_BAR,
+      bar: Math.floor(beats / BEATS_PER_BAR),
+      beatsPerSecond: 1 / (p.secondsPerTick() * TICKS_PER_BEAT),
+      transpose: p.transpose,
+    };
   }
 
   // ------------------------------------------------------------------ hooks

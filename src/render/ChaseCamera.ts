@@ -17,6 +17,8 @@ const target = new Vector3();
  * à 100 m/s un lissage de position laisserait la caméra des dizaines de mètres derrière.
  */
 export class ChaseCamera {
+  /** Hauteur de vol lissée du vaisseau suivi. */
+  private air = 0;
   mode: CameraMode = 'chase';
   private readonly smoothFwd = new Vector3(1, 0, 0);
   private readonly smoothUp = new Vector3(0, 1, 0);
@@ -44,7 +46,9 @@ export class ChaseCamera {
     shipFwd.copy(f.t).multiplyScalar(cp).addScaledVector(f.r, sp);
     this.smoothFwd.lerp(shipFwd, damp(7, dt)).normalize();
     this.smoothUp.lerp(f.u, damp(5, dt)).normalize();
-    shipPos.copy(f.p).addScaledVector(f.r, ship.x).addScaledVector(f.u, HOVER_HEIGHT);
+    // la caméra suit la hauteur de vol avec un léger retard : on sent l'envol et la réception
+    this.air += (ship.h - this.air) * damp(ship.h > this.air ? 6 : 9, dt);
+    shipPos.copy(f.p).addScaledVector(f.r, ship.x).addScaledVector(f.u, HOVER_HEIGHT + this.air);
     const ratio = clamp(ship.speed / ship.perf.vmax, 0, 1.4);
 
     if (this.mode === 'chase') {

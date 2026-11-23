@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { IMuse } from '../src/audio/imuse/IMuse';
 import type { HookEvent, MusicOutput, PartDef } from '../src/audio/imuse/types';
-import { HOOK, JUMP, MAIN, MARKER, SOUND, SOUNDTRACK } from '../src/audio/score';
+import { HOOK, JUMP, MAIN, MARKER, SOUND, SOUNDTRACK, SPEED } from '../src/audio/score';
 import { noteNumber } from '../src/audio/score/notation';
+import { NEON_RIDGE } from '../src/audio/score/neonRidge';
 
 class Out implements MusicOutput {
   t = 0;
@@ -72,7 +73,7 @@ describe('Neon Ridge piloté comme dans le jeu', () => {
     return { out, imuse, runTo, chunk };
   }
 
-  const BAR = (4 * 60) / 138;
+  const BAR = (4 * 60) / NEON_RIDGE.bpm;
 
   it("parcourt grille → croisière → montée → final → outro → jingle de victoire", () => {
     const { out, imuse, runTo, chunk } = play();
@@ -84,7 +85,7 @@ describe('Neon Ridge piloté comme dans le jeu', () => {
     // « GO » : départ au temps suivant (≤ une noire)
     const go = out.t;
     imuse.setHook(SOUND.MAIN, HOOK.JUMP, JUMP.CRUISE);
-    runTo(go + 60 / 138 + 0.2);
+    runTo(go + 60 / NEON_RIDGE.bpm + 0.2);
     expect(chunk()).toBe(MAIN.CRUISE);
 
     // intensité : saut en fin de phrase (≤ 4 mesures) via le roulement FILL_UP
@@ -126,5 +127,19 @@ describe('Neon Ridge piloté comme dans le jeu', () => {
     runTo(4 * BAR - 0.3);
     const full = new Set(out.notes.filter((n) => n.time >= 2 * BAR - 1e-6).map((n) => n.part));
     for (const p of ['acid', 'stab', 'arp', 'perc', 'clap']) expect(full.has(p), p).toBe(true);
+  });
+
+  it('les couches rythmiques suivent le palier de vitesse (hooks SPEED)', () => {
+    const { out, imuse, runTo } = play();
+    const speedParts = ['hat16', 'roll', 'kick2', 'shaker'];
+    imuse.startSound(SOUND.MAIN, MAIN.CRUISE);
+    imuse.setHook(SOUND.MAIN, HOOK.LAYER, 1);
+    imuse.setHook(SOUND.MAIN, HOOK.SPEED, SPEED.SLOW);
+    runTo(2 * BAR - 0.3);
+    expect(out.notes.filter((n) => speedParts.includes(n.part))).toHaveLength(0);
+    imuse.setHook(SOUND.MAIN, HOOK.SPEED, SPEED.MAX);
+    runTo(4 * BAR - 0.3);
+    const fast = new Set(out.notes.filter((n) => n.time >= 2 * BAR - 1e-6).map((n) => n.part));
+    for (const p of speedParts) expect(fast.has(p), p).toBe(true);
   });
 });

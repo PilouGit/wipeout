@@ -5,6 +5,8 @@ import { Emitter } from './Emitter';
 /** Actions ponctuelles (déclenchées à l'appui). */
 export interface InputActions extends Record<string, unknown> {
   fire: undefined;
+  /** Touche de rythme (à jouer sur le temps). */
+  pulse: undefined;
   pause: undefined;
   mute: undefined;
   camera: undefined;
@@ -23,7 +25,7 @@ export interface TouchState {
   airbrakeRight: number;
 }
 
-const PREVENT_DEFAULT = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'F2']);
+const PREVENT_DEFAULT = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'F2', 'ShiftLeft', 'ShiftRight']);
 const STICK_DEADZONE = 0.15;
 
 /**
@@ -57,6 +59,7 @@ export class Input {
     if (PREVENT_DEFAULT.has(e.code)) e.preventDefault();
     if (e.repeat) return;
     if (e.code === 'Space' || e.code === 'ControlLeft' || e.code === 'ControlRight') this.actions.emit('fire', undefined);
+    else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.actions.emit('pulse', undefined);
     else if (e.code === 'Escape' || key === 'p') this.actions.emit('pause', undefined);
     else if (key === 'm') this.actions.emit('mute', undefined);
     else if (key === 'c') this.actions.emit('camera', undefined);
@@ -84,6 +87,7 @@ export class Input {
       abR = Math.max(abR, b(5));
       if (this.pressed(2, b(2) > 0.5 || b(1) > 0.5)) this.actions.emit('fire', undefined);
       if (this.pressed(9, b(9) > 0.5)) this.actions.emit('pause', undefined);
+      if (this.pressed(3, b(3) > 0.5)) this.actions.emit('pulse', undefined);
     }
 
     const t = this.touch;

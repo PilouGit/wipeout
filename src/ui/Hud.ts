@@ -1,4 +1,5 @@
 import { clamp } from '../core/math';
+import type { BeatSample } from '../race/Groove';
 import type { Race } from '../race/Race';
 import type { Ship } from '../race/Ship';
 import type { Track } from '../track/Track';
@@ -28,9 +29,31 @@ export class Hud {
   private msgTimer = 0;
   private subTimer = 0;
   private frame = 0;
+  private readonly beatDots: HTMLElement[];
+  private readonly streakLabel: HTMLElement;
+  private lastDot = -1;
 
   constructor(race: Race) {
     this.minimap = new Minimap(byId<HTMLCanvasElement>('minimap'), race.track);
+    const beat = document.createElement('div');
+    beat.id = 'beat';
+    beat.innerHTML = '<i class="down"></i><i></i><i></i><i></i><b></b>';
+    this.root.appendChild(beat);
+    this.beatDots = [...beat.querySelectorAll('i')];
+    this.streakLabel = beat.querySelector('b')!;
+  }
+
+  /** Indicateur de rythme : le point du temps en cours s'allume au début du temps ; la série s'affiche. */
+  beat(sample: BeatSample | null, streak: number): void {
+    const on = sample ? sample.beats - Math.floor(sample.beats) < 0.22 : false;
+    const dot = sample ? Math.floor(sample.inBar + 1e-6) % 4 : -1;
+    const key = on ? dot : -1;
+    if (key !== this.lastDot) {
+      this.beatDots.forEach((d, i) => d.classList.toggle('on', i === key));
+      this.lastDot = key;
+    }
+    this.streakLabel.textContent = streak > 1 ? `×${streak}` : '';
+    this.streakLabel.classList.toggle('show', streak > 1);
   }
 
   /** Nouveau circuit : on redessine la mini-carte. */

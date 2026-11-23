@@ -2,6 +2,7 @@ import { Vector3 } from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { DIFFICULTIES, HOVER_HEIGHT, PHYSICS_STEP, SHIP_HALF_WIDTH, TRACK_HALF_WIDTH } from '../config';
 import { TOUCH } from '../core/device';
+import { PerformanceMonitor } from './Performance';
 import { Input } from '../core/Input';
 import { Race } from '../race/Race';
 import { createInput, type Ship } from '../race/Ship';
@@ -23,6 +24,7 @@ import { AcousticRaysView } from '../render/AcousticRaysView';
 import { AudioDebugPanel } from '../ui/AudioDebugPanel';
 import { TouchControls } from '../ui/TouchControls';
 import { MusicDirector } from './MusicDirector';
+import { hasAuthored, styleFor } from '../audio/score';
 import { SoundStage } from './SoundStage';
 
 type Screen = 'menu' | 'race' | 'results';
@@ -94,11 +96,31 @@ export class Game {
       this.selection,
     );
     this.music = new MusicDirector(this.audio, this.race);
+    // le rythme entendu sert à juger les actions du joueur
+    this.race.beat = () => this.audio.beatSample();
+    const theme = this.audio.themes.get(this.selection.circuit);
+    if (theme) this.music.setTheme(theme);
+    // les dragons du décor affiché dialoguent avec la musique
+    this.music.setDragonSource(() => this.view.dragonsActive);
     this.stage = new SoundStage(this.audio, this.race, camera);
     this.rays = new AcousticRaysView(scene);
-    this.audioPanel = new AudioDebugPanel(() => this.audio.sfx, (name) => this.triggerSfx(name));
+    this.audioPanel = new AudioDebugPanel(() => this.audio.sfx, (name) => this.triggerSfx(name), {
+      current: () => {
+        const c = this.selection.circuit;
+        const theme = this.audio.themes.get(c)!;
+        return { circuit: c, name: theme.name, style: styleFor(c), seed: this.audio.seeds.get(c) ?? null, bpm: theme.bpm, authored: hasAuthored(c) };
+      },
+      reseed: (seed) => {
+        this.audio.init();
+        this.music.setTheme(this.audio.reseed(this.selection.circuit, seed));
+      },
+    });
     this.touch = TOUCH
-      ? new TouchControls(this.input.touch, { fire: () => this.input.actions.emit('fire', undefined), pause: () => this.setPaused(true) })
+      ? new TouchControls(this.input.touch, {
+          fire: () => this.input.actions.emit('fire', undefined),
+          pulse: () => this.input.actions.emit('pulse', undefined),
+          pause: () => this.setPaused(true),
+        })
       : null;
     document.body.classList.toggle('touch', TOUCH);
     this.showCircuit(this.selection.circuit);
@@ -141,9 +163,13 @@ export class Game {
       view = new CircuitView(this.renderer.scene, circuit, track, this.race.pads, this.tex);
       this.views.set(circuit.id, view);
     }
+    view.setQualityDrop(this.perf.drop);
     for (const v of this.views.values()) v.visible = v === view;
     this.view = view;
     this.renderer.setAtmosphere(circuit.theme);
+    // chaque circuit a sa musique
+    const theme = this.audio.themes.get(circuit.id);
+    if (this.music && theme) this.music.setTheme(theme);
     this.hud.setTrack(track);
   }
 
@@ -241,6 +267,13 @@ export class Game {
     a.on('fire', () => {
       if (this.screen === 'race' && !this.paused && this.race.phase === 'racing') this.player.input.fire = true;
     });
+    a.on('pulse', () => {
+      if (this.screen === 'race' && !this.paused && this.race.phase === 'racing') {
+        // jugé à l'instant de l'appui, pas à la prochaine image
+        this.player.input.pulse = true;
+        this.player.input.pulseBeat = this.audio.beatSample();
+      }
+    });
     a.on('pause', () => (canStart() ? this.startRace() : this.setPaused(!this.paused)));
     a.on('confirm', () => canStart() && this.startRace());
     a.on('restart', () => (this.paused || this.screen === 'results') && this.startRace());
@@ -267,6 +300,26 @@ export class Game {
     ev.on('wallHit', ({ ship, impact }) => {
       if (!isPlayer(ship)) return;
       this.camera.addShake(impact * 0.03);
+    });
+    ev.on('land', ({ ship, impact }) => {
+      if (impact < 3) return;
+      const at = this.track.pointAt(ship.s, ship.x, 0.3, new Vector3());
+      this.sparks.emit(at, Math.min(80, impact * 5), 10 + impact);
+      if (isPlayer(ship)) this.camera.addShake(Math.min(1.2, impact * 0.06));
+    });
+    // rythme : retour visuel et sonore, et le décor s'illumine sur un coup parfait
+    ev.on('groove', ({ result }) => {
+      const { grade, streak, downbeat, action } = result;
+      if (grade === 'miss') {
+        this.hud.subtitle('CONTRETEMPS', 0.6);
+        return;
+      }
+      const what = action === 'pad' ? 'BOOST ' : action === 'land' ? 'RÉCEPTION ' : '';
+      const label = grade === 'perfect' ? (downbeat ? 'PREMIER TEMPS !' : 'PARFAIT') : 'EN RYTHME';
+      this.hud.subtitle(`${what}${label}${streak > 1 ? ` ×${streak}` : ''}`, 0.7);
+      this.audio.sfx?.play('pickup', undefined, grade === 'perfect' ? 0.45 : 0.25);
+      this.view.accent(grade === 'perfect' ? (downbeat ? 1 : 0.7) : 0.35);
+      if (grade === 'perfect') this.camera.addShake(0.15);
     });
     ev.on('bump', ({ a, b }) => {
       if (!isPlayer(a) && !isPlayer(b)) return;
@@ -298,10 +351,36 @@ export class Game {
 
   // ------------------------------------------------------------------ boucle
 
+  /**
+   * Qualité adaptative (sauf `?qualite=max`) et, avec `?perf`, un compteur à l'écran :
+   * images/s, pire image, palier de qualité, notes de musique par seconde.
+   */
+  private readonly perf = new PerformanceMonitor((level) => {
+    this.renderer.setQualityDrop(level);
+    for (const v of this.views.values()) v.setQualityDrop(level);
+  }, new URLSearchParams(location.search).get('qualite') !== 'max');
+  private readonly perfOverlay = new URLSearchParams(location.search).has('perf') ? createPerfOverlay() : null;
+  private perfClock = 0;
+  private perfNotes = 0;
+
+  private updatePerfOverlay(dt: number): void {
+    const el = this.perfOverlay;
+    if (!el || (this.perfClock += dt) < 0.5) return;
+    const notes = this.audio.notesSent;
+    const nps = (notes - this.perfNotes) / this.perfClock;
+    this.perfNotes = notes;
+    this.perfClock = 0;
+    const p = this.perf;
+    el.textContent = `${(1000 / p.avgMs).toFixed(0)} i/s · moy ${p.avgMs.toFixed(1)} ms · pire ${p.worstMs.toFixed(0)} ms · qualité −${p.drop} · ${nps.toFixed(0)} notes/s`;
+  }
+
   private readonly loop = (now: number): void => {
     requestAnimationFrame(this.loop);
-    const dt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
+    const rawDt = Math.max(0, (now - this.lastTime) / 1000);
+    const dt = Math.min(0.1, rawDt);
     this.lastTime = now;
+    this.perf.frame(rawDt, document.hidden || rawDt > 0.5);
+    this.updatePerfOverlay(rawDt);
     const time = now / 1000;
 
     const p = this.player;
@@ -313,7 +392,7 @@ export class Game {
       this.camera.flyby(dt, time, this.track);
       this.renderer.camera.updateMatrixWorld();
       this.previewPlayerShip(time);
-      this.view.update(dt, time, this.renderer.camera.position);
+      this.view.update(dt, time, this.renderer.camera, this.audio.musicFeatures());
       this.weaponView.update(this.race.weapons, this.track, time);
       this.speedLines.update(dt, 0, 0);
       this.renderer.render();
@@ -398,9 +477,10 @@ export class Game {
 
     const ratio = this.camera.follow(dt, p, this.track);
     this.shipViews[this.race.ships.indexOf(p)].visible = !p.dead && this.camera.mode === 'chase';
-    this.view.update(dt, time, this.renderer.camera.position);
+    this.view.update(dt, time, this.renderer.camera, this.audio.musicFeatures());
     this.speedLines.update(dt, p.speed, ratio + (p.boostTime > 0 ? 0.3 : 0));
     this.hud.update(this.race, p);
+    this.hud.beat(this.race.phase === 'racing' ? this.audio.beatSample() : null, this.race.groove.streak);
   }
 
   private emitScrapeSparks(): void {
@@ -414,7 +494,7 @@ export class Game {
   }
 
   private shipPosition(ship: Ship): Vector3 {
-    return this.track.pointAt(ship.s, ship.x, HOVER_HEIGHT, new Vector3());
+    return this.track.pointAt(ship.s, ship.x, HOVER_HEIGHT + ship.h, new Vector3());
   }
 }
 
@@ -452,4 +532,13 @@ function enterLandscapeFullscreen(): void {
     return;
   }
   document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).then(lockLandscape, () => undefined);
+}
+
+/** Compteur de performances (`?perf`). */
+function createPerfOverlay(): HTMLElement {
+  const el = document.createElement('div');
+  el.id = 'perf';
+  el.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:30;font:11px ui-monospace,Consolas,monospace;color:#9ff;background:rgba(0,0,0,.55);padding:3px 6px;border-radius:4px;pointer-events:none';
+  document.body.appendChild(el);
+  return el;
 }

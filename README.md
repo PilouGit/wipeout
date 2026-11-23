@@ -53,6 +53,13 @@ La musique suit les principes d'iMUSE ([document technique](https://github.com/m
 - **Marqueurs + triggers** : à l'arrivée, le jeu demande l'outro et accroche le jingle de victoire ou de défaite au marqueur de fin d'outro ; il démarre pile sur la mesure.
 - **Fondus entiers à 60 Hz** (Bresenham, comme `FdFade`), **commandes différées**, **groupes de volume**, **compteur de pause imbriqué**, **priorités**, **vitesse** (128 = tempo d'origine, accélère au dernier tour), **contrôleurs MIDI** (la brillance des synthés suit la vitesse).
 
+- **Un thème par circuit** : Neon Ridge est écrit à la main ; les autres circuits sont générés à partir d'une graine fixe et d'un style (`audio/score/generator.ts` : tonalité, mode, tempo, progression, batterie, basse acide, mélodie, timbres). Tous partagent la même architecture de sections et de hooks (`audio/score/compose.ts`). `?musique=1234` régénère tous les thèmes à partir de cette graine, `?musique=aleatoire` en tire une au hasard. La mélodie générée est composée comme une phrase : un motif d'une mesure, répété, varié puis contrasté (A A′ B cadence | A A″ C cadence sur la sensible), les temps forts sur les notes de l'accord. Le panneau **F2** (section MUSIQUE) permet d'écouter d'autres graines pour le circuit affiché, en pleine course, avant d'en reporter une dans `audio/score/themes.ts`.
+- **Dragons** : le décor écoute la musique (les dragons jaillissent sur les drops, battent des ailes sur les médiums, crachent le feu sur les aigus) et la musique leur répond : tant qu'ils sont hors du sol, le hook `dragon` fait entrer leur rugissement à la mesure suivante.
+
+- **Mise en scène par section** (`render/music/Staging.ts`), à la manière d'une démo : chaque section est une scène avec sa dynamique (breakdown presque immobile, drop qui explose), les montées (FILL_UP, FILL_FINAL, fin d'intro et de breakdown) retiennent et assombrissent le décor, et chaque changement de section entendu (lu à l'heure audio) est une coupe nette : éclair, palette, motif du sol (spirale, anneaux, secteurs, houle), dragons sur le drop. En virage serré, le décor s'efface au profit de la piste, et les colonnes qui bordent la piste restent sobres.
+- **Le rythme au pilotage** (`race/Groove.ts`) : la touche de rythme (**Maj**, **Y** à la manette, bouton **♪** au tactile) jouée sur le temps donne une impulsion qui grandit avec la série (jusqu'à ×8, bonus sur le premier temps) ; à contretemps elle coûte un peu de vitesse et casse la série. Un speed pad franchi ou un atterrissage sur le temps rapporte aussi. L'appui est jugé à l'instant entendu (horloge audio moins la latence de sortie), le HUD bat la mesure, et la série nourrit l'intensité de la musique.
+- **Performances** : la qualité baisse d'elle-même par paliers si le jeu passe sous ~45 images/s (ciel allégé et planètes sans atmosphère, puis bloom à demi-résolution, puis définition réduite) ; `?qualite=max` l'en empêche, `?perf` affiche images/s, pire image, palier et notes de musique par seconde.
+
 `game/MusicDirector.ts` traduit l'état de la course (vitesse, rang, adversaires proches, perte d'élan, dernier tour, touché, arrivée) en commandes iMUSE. Tout est synthétisé en Web Audio, sans fichier audio. Le moteur est testé sans navigateur via une sortie factice (`tests/imuse.test.ts`, `tests/soundtrack.test.ts`).
 
 Positions : chaque vaisseau vit dans le repère de la piste — `s` distance parcourue (cumulée sur les tours), `x` décalage latéral, `psi` cap relatif à la piste. La physique avance à pas fixe (120 Hz).
@@ -111,3 +118,31 @@ sfx.options.reflections = false;                // reverb, doppler, occlusion
 Dans le jeu, c'est `src/game/SoundStage.ts` qui fait ce travail à partir de `Race`.
 
 Pour le coût CPU, chaque voix compte un panner HRTF sur le son direct et cinq lignes de réflexion. Les réflexions des concurrents utilisent un panoramique égal-puissance, moins coûteux, et une voix au-delà de 350 m est coupée.
+
+## Sur téléphone
+
+```bash
+npm run dev:mobile      # ouvre le serveur au réseau local
+```
+Le téléphone doit être sur le même Wi-Fi que l'ordinateur. Ouvrez ensuite l'adresse « Network » affichée (par exemple `http://192.168.1.20:5173`), en paysage. Si le téléphone n'arrive pas à se connecter, le pare-feu Windows bloque probablement Node : autorisez-le sur les réseaux privés.
+
+**Commandes tactiles**, affichées automatiquement quand le pointeur principal est un écran tactile :
+- **Moitié gauche de l'écran : stick flottant.** Posez le pouce n'importe où, puis glissez à gauche ou à droite pour diriger.
+- **À droite :**
+  - les aérofreins ◀ AÉRO et AÉRO ▶ ;
+  - FREIN, à maintenir pour freiner (l'accélération est automatique) ;
+  - ARME, qui affiche l'arme ramassée.
+- **En haut, au centre :** la pause.
+
+Le HUD passe en version compacte pour ne rien laisser sous les pouces. La course se met en pause si l'application passe en arrière-plan ou si l'on tourne l'écran en portrait. Au lancement d'une course, le jeu passe en plein écran et en paysage sur Android ; sur iPhone, un message invite à tourner l'appareil.
+
+**Qualité allégée**, activée par défaut sur mobile :
+- **Rendu :** pas d'antialiasing, définition 1×, bloom calculé à demi-résolution.
+- **Audio :** HRTF et réflexions réservés au joueur, panoramique simple pour les concurrents et les bruitages, réverbération courte.
+
+**Options dans l'URL :**
+- `?touch` : commandes tactiles sur ordinateur, pour tester ;
+- `?lite` : qualité allégée ;
+- `?full` : qualité complète, même sur mobile.
+
+Sur iPhone, le bouton silencieux coupe aussi le son du jeu : c'est une règle de Safari.

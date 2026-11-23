@@ -5,6 +5,16 @@ import type { Ship } from './Ship';
 
 const BOOST_SPEED_FACTOR = 1.3;
 const GRAVITY = 9.8;
+/** Accélération de plaquage de la sustentation (en plus de la pesanteur) : au-delà, le vaisseau décolle. */
+const HOVER_HOLD = 16;
+/** En vol, la sustentation tire le vaisseau vers la piste (m/s², en plus de la pesanteur). */
+const AIR_PULL = 14;
+const MAX_AIR = 22;
+/** Plafond de vol dans un tunnel. */
+const TUNNEL_AIR = 5;
+/** En vol, l'adhérence latérale et la poussée sont réduites. */
+const AIR_GRIP = 0.25;
+const AIR_THRUST = 0.5;
 const frame = createFrame();
 
 /**
@@ -27,6 +37,7 @@ export function stepShip(ship: Ship, track: Track, dt: number): number {
   ship.stunTime = Math.max(0, ship.stunTime - dt);
   ship.wallCooldown = Math.max(0, ship.wallCooldown - dt);
   const stunned = ship.stunned;
+  const air = verticalStep(ship, track, fr.u.y, dt);
 
   // Lacet : direction lissée + aérofreins
   ship.steer += (inp.steer - ship.steer) * Math.min(1, dt * (ship.isPlayer ? 9 : 7));
@@ -42,7 +53,7 @@ export function stepShip(ship: Ship, track: Track, dt: number): number {
 
   // Longitudinal
   const vmax = perf.vmax * ship.vmaxMul * (ship.boostTime > 0 ? BOOST_SPEED_FACTOR : 1);
-  if (!stunned) u += inp.thrust * perf.accel * (1 - Math.max(0, u) / vmax) * dt;
+  if (!stunned) u += inp.thrust * perf.accel * (air ? AIR_THRUST : 1) * (1 - Math.max(0, u) / vmax) * dt;
   if (ship.boostTime > 0) u += 18 * dt;
   if (u > vmax) u -= (u - vmax) * 1.2 * dt;
   u -= u * (inp.thrust ? 0.02 : 0.22) * dt;
@@ -52,7 +63,7 @@ export function stepShip(ship: Ship, track: Track, dt: number): number {
   u = Math.max(u, -15);
 
   // Adhérence latérale : une partie de la glisse est rendue en vitesse
-  const grip = (inp.airbrakeLeft || inp.airbrakeRight ? 2.2 : 3.6) * perf.grip;
+  const grip = (inp.airbrakeLeft || inp.airbrakeRight ? 2.2 : 3.6) * perf.grip * (air ? AIR_GRIP : 1);
   const lost = w * (1 - Math.exp(-grip * dt));
   w -= lost;
   u += Math.abs(lost) * 0.25;
@@ -99,4 +110,47 @@ export function stepShip(ship: Ship, track: Track, dt: number): number {
   if (stunned) ship.spin += dt * 14 * (ship.stunTime / 0.9);
   else ship.spin *= 1 - Math.min(1, dt * 8);
   return damagingImpact;
+}
+
+/**
+ * Mouvement le long de la normale de la piste. Au sol, la sustentation suit la surface tant que
+ * l'accélération nécessaire (centrifuge sur une bosse) reste sous HOVER_HOLD ; au-delà, le vaisseau
+ * garde sa lancée et décolle. En vol : h'' = -g·n_y - pull - u²·κ (κ : courbure en tangage).
+ * Pas de vol dans les figures magnétiques.
+ * @returns vrai si le vaisseau est en l'air
+ */
+function verticalStep(ship: Ship, track: Track, upY: number, dt: number): boolean {
+  ship.landImpact = 0;
+  if (track.isMagnetic(ship.s)) {
+    // le rail magnétique rattrape un vaisseau encore en l'air
+    if (ship.h > 0) ship.landImpact = Math.max(1, -ship.vh);
+    ship.h = ship.vh = 0;
+    return false;
+  }
+  const kappa = track.pitchAt(ship.s);
+  const lift = -GRAVITY * upY - ship.u * Math.abs(ship.u) * kappa;
+  if (ship.h <= 0) {
+    if (lift <= HOVER_HOLD) {
+      ship.vh = 0;
+      return false;
+    }
+    ship.vh = 0;
+  }
+  ship.vh += (lift - AIR_PULL) * dt;
+  ship.h += ship.vh * dt;
+  if (ship.h > MAX_AIR) {
+    ship.h = MAX_AIR;
+    ship.vh = Math.min(0, ship.vh);
+  }
+  // dans un tunnel, le plafond rabat le vaisseau (en douceur, pas de téléportation)
+  if (ship.h > TUNNEL_AIR && track.zoneAt(ship.s, 'tunnel')) {
+    ship.h -= (ship.h - TUNNEL_AIR) * Math.min(1, dt * 10);
+    ship.vh = Math.min(0, ship.vh);
+  }
+  if (ship.h <= 0) {
+    ship.landImpact = Math.max(0, -ship.vh);
+    ship.h = ship.vh = 0;
+    return false;
+  }
+  return true;
 }

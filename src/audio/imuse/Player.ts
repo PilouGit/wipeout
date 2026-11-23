@@ -116,6 +116,16 @@ export class Player {
     return this.time + (evTick - this.tick) * this.secondsPerTick();
   }
 
+  /**
+   * Position musicale (ticks fractionnaires dans le chunk courant) à l'instant audio `time`,
+   * extrapolée depuis l'ancre. L'ancre étant en avance (LOOKAHEAD), la valeur peut être
+   * négative juste après un changement de chunk : les chunks durant des mesures entières,
+   * la phase dans le temps et la mesure (modulo) reste juste.
+   */
+  ticksAt(time: number): number {
+    return this.tick + (time - this.time) / this.secondsPerTick();
+  }
+
   /** Décale l'ancre (reprise après une pause). */
   shiftTime(delta: number): void {
     this.time += delta;

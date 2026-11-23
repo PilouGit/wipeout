@@ -2,6 +2,7 @@ import { AI_SKILLS, FIELD_SIZE, LAPS, RECHARGE_ZONE, type Difficulty } from '../
 import { Emitter } from '../core/Emitter';
 import type { Track } from '../track/Track';
 import { AIDriver, type AIContext } from './AIDriver';
+import { Groove, type BeatSample, type GrooveResult } from './Groove';
 import { createPads, PAD_TRIGGER_HALF_LENGTH, PAD_TRIGGER_HALF_WIDTH, type Pad } from './pads';
 import { stepShip } from './physics';
 import { Ship, type ItemKind } from './Ship';
@@ -17,11 +18,15 @@ export interface RaceEvents extends Record<string, unknown> {
   pickup: { ship: Ship; item: ItemKind };
   itemUsed: { ship: Ship; item: ItemKind };
   wallHit: { ship: Ship; impact: number };
+  /** Retour sur la piste après un saut ; impact = vitesse verticale (m/s). */
+  land: { ship: Ship; impact: number };
   bump: { a: Ship; b: Ship; dv: number };
   shipHit: { ship: Ship; shielded: boolean };
   lap: { ship: Ship; lap: number; time: number };
   finish: { ship: Ship; position: number };
   eliminated: { ship: Ship };
+  /** Action rythmique du joueur jugée (touche de rythme, pad ou atterrissage). */
+  groove: { ship: Ship; result: GrooveResult };
 }
 
 export interface RaceSetup {
@@ -58,6 +63,10 @@ export class Race {
 
   phase: RacePhase = 'idle';
   time = 0;
+  /** Rythme du joueur (série d'actions sur le temps). */
+  readonly groove = new Groove();
+  /** Position musicale entendue, fournie par le jeu ; null = pas de musique, pas de jugement. */
+  beat: () => BeatSample | null = () => null;
 
   private readonly drivers = new Map<Ship, AIDriver>();
   private countdownLeft = 0;
@@ -108,6 +117,7 @@ export class Race {
       this.drivers.get(ship)!.reset(skill);
     });
     this.weapons.clear();
+    this.groove.reset();
     this.time = 0;
     this.countdownLeft = COUNTDOWN_SECONDS + 1;
     this.lastCount = -1;
@@ -141,10 +151,21 @@ export class Race {
         const used = this.weapons.use(ship);
         if (used) this.events.emit('itemUsed', { ship, item: used });
       }
+      if (ship.input.pulse) {
+        ship.input.pulse = false;
+        const at = ship.input.pulseBeat;
+        ship.input.pulseBeat = undefined;
+        if (ship.isPlayer && !ship.finished) this.judge('pulse', ship, at === undefined ? this.beat() : at);
+      }
       const impact = stepShip(ship, this.track, dt);
       if (impact > 0) this.events.emit('wallHit', { ship, impact });
+      if (ship.landImpact > 0) {
+        this.events.emit('land', { ship, impact: ship.landImpact });
+        if (ship.isPlayer && ship.landImpact >= 2) this.judge('land', ship);
+      }
     }
 
+    this.groove.update(dt, this.beat());
     this.resolveCollisions();
     this.handlePads(dt);
     this.weapons.update(dt, this.ships, (ship, hit, by) => this.applyHit(ship, hit, by));
@@ -210,6 +231,7 @@ export class Race {
           ship.boostTime = Math.max(ship.boostTime, 1.3);
           ship.u += 14;
           this.events.emit('boost', { ship });
+          if (ship.isPlayer) this.judge('pad', ship);
         } else if (!ship.item) {
           ship.item = randomItem();
           this.drivers.get(ship)!.onItemPicked();
@@ -220,6 +242,11 @@ export class Race {
         ship.energy = Math.min(100, ship.energy + 14 * dt);
       }
     }
+  }
+
+  private judge(action: 'pulse' | 'pad' | 'land', ship: Ship, sample: BeatSample | null = this.beat()): void {
+    const result = this.groove.act(action, ship, sample);
+    if (result) this.events.emit('groove', { ship, result });
   }
 
   private applyHit(ship: Ship, hit: HitSpec, by: Ship): void {

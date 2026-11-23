@@ -54,12 +54,23 @@ export class Renderer {
     this.hemi.groundColor.set(theme.fog);
   }
 
+  private bloomScale = LITE ? 0.5 : 1;
+  private pixelScale = 1;
+
+  /** Baisse de qualité (palier 2 : bloom à demi-résolution ; palier 3 : définition réduite). */
+  setQualityDrop(level: number): void {
+    this.bloomScale = level >= 2 || LITE ? 0.5 : 1;
+    this.pixelScale = level >= 3 ? 0.75 : 1;
+    this.gl.setPixelRatio((LITE ? 1 : Math.min(devicePixelRatio, 1.5)) * this.pixelScale);
+    this.resize();
+  }
+
   private resize(): void {
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.gl.setSize(innerWidth, innerHeight);
     this.composer.setSize(innerWidth, innerHeight);
-    if (LITE) this.bloom.setSize(Math.ceil(innerWidth / 2), Math.ceil(innerHeight / 2));
+    if (this.bloomScale < 1) this.bloom.setSize(Math.ceil(innerWidth * this.bloomScale), Math.ceil(innerHeight * this.bloomScale));
   }
 
   render(): void {

@@ -1,32 +1,22 @@
 import {
-  BackSide, BoxGeometry, Color, ConeGeometry, DoubleSide, RepeatWrapping, Path, Shape, ShapeGeometry, Vector2, CylinderGeometry, Float32BufferAttribute, BufferGeometry, GridHelper,
+  BoxGeometry, Color, ConeGeometry, DoubleSide, RepeatWrapping, Path, Shape, ShapeGeometry, Vector2, CylinderGeometry, Float32BufferAttribute, BufferGeometry, GridHelper,
   Group, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry,
-  Points, PointsMaterial, ShaderMaterial, SphereGeometry, TorusGeometry, Vector3,
+  Points, PointsMaterial, ShaderMaterial, SphereGeometry, TorusGeometry, Vector3, type Object3D,
 } from 'three';
+import type { MusicFeatures } from '../audio/imuse/MusicPulse';
 import { GROUND_Y } from '../config';
+import { LITE } from '../core/device';
+import { Dragons } from './music/Dragons';
+import { GlowParticles } from './music/GlowParticles';
+import { MusicBands } from './music/MusicBands';
+import { MusicSky } from './music/MusicSky';
+import { Staging } from './music/Staging';
+import { SkyPlanets, type PlanetSpec } from './music/SkyPlanets';
+import { ReactiveGround } from './music/ReactiveGround';
 import { TUNNEL_CEILING, TUNNEL_WALL_MARGIN } from '../track/features';
 import type { CircuitTheme } from '../track/circuits';
 import type { Track } from '../track/Track';
 import { neon, type Textures } from './textures';
-
-const SKY_VERTEX = /* glsl */ `
-  varying vec3 vP;
-  void main() { vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
-
-const SKY_FRAGMENT = /* glsl */ `
-  uniform vec3 fogc;
-  uniform vec3 horizon;
-  uniform vec3 mid;
-  uniform vec3 top;
-  varying vec3 vP;
-  void main() {
-    float h = vP.y;
-    vec3 c = mix(fogc, horizon, smoothstep(-0.01, 0.03, h));
-    c = mix(c, mid, smoothstep(0.03, 0.22, h));
-    c = mix(c, top, smoothstep(0.22, 0.7, h));
-    if (h < -0.01) c = fogc;
-    gl_FragColor = vec4(c, 1.0);
-  }`;
 
 const SUN_VERTEX = /* glsl */ `
   varying vec2 vUv;
@@ -47,8 +37,30 @@ const SUN_FRAGMENT = /* glsl */ `
     gl_FragColor = vec4(mix(low, high, smoothstep(0.1, 0.9, y)), 1.0);
   }`;
 
+/** Astres lointains de chaque décor (le soleil est à part, en -z). */
+const PLANETS: Readonly<Record<CircuitTheme['scenery'], readonly PlanetSpec[]>> = {
+  city: [
+    { at: [-2500, 1250, -2900], radius: 420, colors: [0xb46bff, 0x2a0d4a], band: 'bass', ring: 1.15 },
+    { at: [2700, 850, -2100], radius: 150, colors: [0x2ef2ff, 0x0b3a5a], band: 'mid' },
+    { at: [1300, 1800, 2900], radius: 95, colors: [0xff7ad0, 0x3a0a2a], band: 'high' },
+  ],
+  peaks: [
+    { at: [-2600, 1500, -2900], radius: 360, colors: [0xd8f2ff, 0x5a86c8], band: 'bass', ring: 1.25 },
+    { at: [3000, 1100, 1500], radius: 150, colors: [0xb59bff, 0x2a2a6a], band: 'mid' },
+  ],
+  volcano: [
+    { at: [-2400, 1000, -3100], radius: 480, colors: [0xff7a2a, 0x3a0608], band: 'bass', ring: 1.1 },
+    { at: [2800, 1300, -1400], radius: 130, colors: [0xffd04a, 0x5a1a08], band: 'mid' },
+    { at: [-900, 2000, 3000], radius: 80, colors: [0xff3a5a, 0x2a0408], band: 'high' },
+  ],
+  moon: [
+    { at: [-1600, 900, -3600], radius: 260, colors: [0x5aa8ff, 0x0a2a6a], band: 'bass' },
+    { at: [2600, 1600, 2000], radius: 380, colors: [0x9dff7a, 0x1a3a2a], band: 'mid', ring: 1.2 },
+    { at: [3200, 700, -1200], radius: 90, colors: [0xffffff, 0x55607a], band: 'high' },
+  ],
+};
+
 const hdr = (hex: number, k: number) => new Color(hex).multiplyScalar(k);
-const linear = (hex: number) => new Color(hex);
 
 /** Décor d'un circuit : ciel, sol, paysage et reliefs couvrant les tunnels. */
 export class Environment {
@@ -56,10 +68,19 @@ export class Environment {
   readonly root = new Group();
   /** Éléments à l'infini : suivent la caméra. */
   readonly sky = new Group();
+  private readonly bands = new MusicBands();
+  /** Mise en scène par section (dynamique, montées, coupes, lisibilité en virage). */
+  private readonly stage = new Staging();
+  private ground!: ReactiveGround;
+  private dragons!: Dragons;
+  private particles!: GlowParticles;
+  private musicSky!: MusicSky;
+  private planets!: SkyPlanets;
+  private sunMesh!: Mesh;
 
   constructor(private readonly track: Track, tex: Textures, private readonly theme: CircuitTheme) {
     this.buildSky();
-    this.buildGround();
+    this.buildGround(tex);
     switch (theme.scenery) {
       case 'city':
         this.buildCity(tex);
@@ -82,6 +103,43 @@ export class Environment {
     this.sky.position.copy(cameraPosition);
   }
 
+  /** Sol réactif et dragons, pilotés par la musique (iMUSE). */
+  update(dt: number, music: MusicFeatures, camera: Object3D): void {
+    if (dt <= 0) return;
+    this.bands.update(music, dt);
+    this.stage.update(dt, music, camera);
+    // le drop d'une section (coupe vers DRIVE / FINAL) fait jaillir les dragons, pile sur la mesure
+    if (this.stage.drop) this.bands.drop = true;
+    if (music.clock) this.ground.update(dt, this.bands, this.stage);
+    else this.ground.idle(dt, music.beats);
+    this.dragons.update(dt, this.bands, camera);
+    this.particles.update(dt);
+    this.updateSky(dt);
+  }
+
+  /** Ciel (nuages, plasma, aurore), planètes et soleil vibrent avec la musique. */
+  private updateSky(dt: number): void {
+    this.musicSky.update(dt, this.bands, this.stage);
+    this.planets.update(dt, this.bands, this.stage);
+    this.sunMesh.scale.setScalar(1 + 0.1 * this.bands.bassN * this.stage.intensity + 0.08 * this.stage.cut);
+  }
+
+  /** Baisse de qualité : à partir du palier 1, ciel allégé et planètes sans atmosphère. */
+  setQualityDrop(level: number): void {
+    this.musicSky.setLight(level >= 1);
+    this.planets.halos = level < 1;
+  }
+
+  /** Accent ponctuel (action rythmique réussie) : un éclair de scène, plus faible qu'une coupe. */
+  accent(strength: number): void {
+    this.stage.cut = Math.max(this.stage.cut, 0.55 * strength);
+  }
+
+  /** Des dragons sont hors du sol. */
+  get dragonsActive(): boolean {
+    return this.dragons.active;
+  }
+
   set visible(v: boolean) {
     this.root.visible = this.sky.visible = v;
   }
@@ -90,15 +148,11 @@ export class Environment {
 
   private buildSky(): void {
     const t = this.theme;
-    const sky = new Mesh(
-      new SphereGeometry(5000, 32, 16),
-      new ShaderMaterial({
-        side: BackSide, depthWrite: false,
-        uniforms: { fogc: { value: linear(t.fog) }, horizon: { value: linear(t.sky[0]) }, mid: { value: linear(t.sky[1]) }, top: { value: linear(t.sky[2]) } },
-        vertexShader: SKY_VERTEX, fragmentShader: SKY_FRAGMENT,
-      }),
-    );
-    sky.renderOrder = -10;
+    this.musicSky = new MusicSky({
+      fog: t.fog, sky: t.sky, accent: t.accent, cloud: t.sky[0],
+      plasma: [t.grid[0], t.walls[0], t.accent, t.grid[1]],
+    }, LITE);
+    const sky = this.musicSky.mesh;
 
     const moon = t.scenery === 'moon';
     const sun = new Mesh(
@@ -112,6 +166,7 @@ export class Environment {
     sun.position.set(400, moon ? 1400 : 260, -4300);
     sun.lookAt(0, 0, 0);
     sun.renderOrder = -9;
+    this.sunMesh = sun;
 
     const pts: number[] = [];
     const count = moon ? 4000 : 1800;
@@ -127,24 +182,30 @@ export class Environment {
     stars.renderOrder = -9;
     this.sky.add(sky, sun, stars);
 
-    if (moon) {
-      // la Terre, au-dessus de l'horizon
-      const earth = new Mesh(new SphereGeometry(260, 32, 16), new MeshBasicMaterial({ color: hdr(0x3a7bff, 1.1), fog: false }));
-      earth.position.set(-1600, 900, -3600);
-      const halo = new Mesh(new SphereGeometry(275, 32, 16), new MeshBasicMaterial({ color: hdr(0x9ad7ff, 0.6), transparent: true, opacity: 0.25, fog: false, side: BackSide }));
-      halo.position.copy(earth.position);
-      this.sky.add(earth, halo);
-    }
+    this.planets = new SkyPlanets(PLANETS[t.scenery], sun.position);
+    this.sky.add(this.planets.root);
   }
 
-  private buildGround(): void {
+  private buildGround(tex: Textures): void {
     const t = this.theme;
     const ground = new Mesh(new PlaneGeometry(12000, 12000), new MeshBasicMaterial({ color: t.ground }));
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = GROUND_Y - 0.2;
+    ground.position.y = GROUND_Y - 0.4;
+    // la grille continue le champ de colonnes jusqu'à l'horizon
     const grid = new GridHelper(12000, 240, neon(t.grid[0], 0.9), neon(t.grid[1], 0.7));
-    grid.position.y = GROUND_Y;
-    this.root.add(ground, grid);
+    grid.position.y = GROUND_Y - 0.3;
+    this.ground = new ReactiveGround(this.track, t.grid, LITE);
+    this.particles = new GlowParticles(LITE ? 1200 : 3000, tex.glow, LITE ? 3.2 : 2.6);
+    this.dragons = new Dragons(this.ground.field, this.particles, { glow: t.accent, fire: t.sun[1] }, (x, z) => this.trackDistance(x, z));
+    this.root.add(ground, grid, this.ground.mesh, this.dragons.root, this.particles.points);
+  }
+
+  /** Distance horizontale approchée à la piste. */
+  private trackDistance(x: number, z: number): number {
+    let best = Infinity;
+    const pts = this.track.points;
+    for (let i = 0; i < pts.length; i += 3) best = Math.min(best, Math.hypot(pts[i].x - x, pts[i].z - z));
+    return best;
   }
 
   // ------------------------------------------------------------------ paysages
@@ -230,7 +291,7 @@ export class Environment {
       river.rotation.x = -Math.PI / 2;
       river.rotation.z = Math.random() * Math.PI;
       const a = Math.random() * Math.PI * 2;
-      river.position.set(1500 + Math.cos(a) * 1300, GROUND_Y + 0.3, -1900 + Math.sin(a) * 1300);
+      river.position.set(1500 + Math.cos(a) * 1300, GROUND_Y + 0.8, -1900 + Math.sin(a) * 1300);
       this.root.add(river);
     }
     this.root.add(g);

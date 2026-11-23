@@ -127,12 +127,14 @@ export class ShipView {
 
     const bob = Math.sin(time * 3 + ship.color) * 0.07;
     const g = this.group;
-    g.position.copy(f.p).addScaledVector(f.r, ship.x).addScaledVector(f.u, HOVER_HEIGHT + bob);
+    g.position.copy(f.p).addScaledVector(f.r, ship.x).addScaledVector(f.u, HOVER_HEIGHT + ship.h + bob);
     g.quaternion.setFromRotationMatrix(basis.makeBasis(left, f.u, fwd));
 
     const inp = ship.input;
     const roll = ship.steer * 0.38 + (inp.airbrakeRight - inp.airbrakeLeft) * 0.18;
-    const pitch = -0.04 * inp.thrust + 0.05 * inp.brake;
+    // en vol, le nez suit la trajectoire (monte, puis pique vers la réception)
+    const flight = ship.airborne ? Math.atan2(-ship.vh, Math.max(10, ship.speed)) : 0;
+    const pitch = -0.04 * inp.thrust + 0.05 * inp.brake + flight;
     g.quaternion.multiply(tilt.setFromEuler(euler.set(pitch, ship.spin, roll)));
 
     const thrust = inp.thrust * 0.75 + (ship.boostTime > 0 ? 0.9 : 0) + 0.15;

@@ -1,4 +1,5 @@
-import { Group, type Scene, type Vector3 } from 'three';
+import { Group, type Camera, type Scene } from 'three';
+import type { MusicFeatures } from '../audio/imuse/MusicPulse';
 import type { Pad } from '../race/pads';
 import type { Circuit } from '../track/circuits';
 import type { Track } from '../track/Track';
@@ -21,13 +22,28 @@ export class CircuitView {
     scene.add(this.root, this.environment.sky);
   }
 
+  setQualityDrop(level: number): void {
+    this.environment.setQualityDrop(level);
+  }
+
+  /** Accent visuel ponctuel (action réussie sur le temps), 0..1. */
+  accent(strength: number): void {
+    this.environment.accent(strength);
+  }
+
+  /** Des dragons sont hors du sol (pour la musique). */
+  get dragonsActive(): boolean {
+    return this.environment.dragonsActive;
+  }
+
   set visible(v: boolean) {
     this.root.visible = v;
     this.environment.sky.visible = v;
   }
 
-  update(dt: number, time: number, cameraPosition: Vector3): void {
-    this.environment.follow(cameraPosition);
+  update(dt: number, time: number, camera: Camera, music: MusicFeatures): void {
+    this.environment.follow(camera.position);
+    this.environment.update(dt, music, camera);
     this.pads.update(dt, time);
   }
 }

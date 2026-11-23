@@ -48,6 +48,7 @@ export function buildTrackView(track: Track, tex: Textures, theme: CircuitTheme)
     const range = zoneRange(track, zone);
     if (zone.kind === 'tunnel') buildTunnel(root, track, range, theme, extrude);
     else if (zone.kind === 'magnetic') buildMagneticRings(root, track, range, theme);
+    else if (zone.kind === 'jump') buildJumpMarks(root, track, range, theme);
     else buildColonnade(root, track, zone, theme);
   }
 
@@ -147,6 +148,28 @@ function buildColonnade(root: Group, track: Track, zone: Zone, theme: CircuitThe
     }
   }
   root.add(posts, caps);
+}
+
+/** Tremplin : chevrons néon sur la rampe, ligne d'appel au sommet, balises latérales. */
+function buildJumpMarks(root: Group, track: Track, range: [number, number], theme: CircuitTheme): void {
+  const h = track.halfWidth;
+  // la rampe est la première moitié de la zone : du pied au sommet
+  const crest = range[0] + Math.round((range[1] - range[0]) * 0.45);
+  const chevron = new MeshBasicMaterial({ color: neon(theme.walls[0], 2.2), side: DoubleSide });
+  const lip = new MeshBasicMaterial({ color: neon(theme.sun[1], 3.5), side: DoubleSide });
+  for (let i = range[0]; i < crest - 1; i += 3) {
+    // deux bandes en V pointant vers l'avant, posées sur la piste
+    root.add(new Mesh(profileGeometry(track, i, i + 1, [[-h + 0.8, 0.04], [-1, 0.04]], false), chevron));
+    root.add(new Mesh(profileGeometry(track, i + 1, i + 2, [[1, 0.04], [h - 0.8, 0.04]], false), chevron));
+  }
+  root.add(new Mesh(profileGeometry(track, crest, crest + 1, [[-h, 0.05], [h, 0.05]], false), lip));
+  // balises aux murs sur toute la zone
+  const post: Profile = [[h + 0.35, 0], [h + 0.35, 3.2]];
+  const postL: Profile = [[-h - 0.35, 0], [-h - 0.35, 3.2]];
+  for (let i = range[0]; i <= crest; i += 4) {
+    root.add(new Mesh(profileGeometry(track, i, i + 1, post, false), lip));
+    root.add(new Mesh(profileGeometry(track, i, i + 1, postL, false), lip));
+  }
 }
 
 /** Arceaux lumineux le long des loopings et tire-bouchons (lisibilité de la trajectoire). */

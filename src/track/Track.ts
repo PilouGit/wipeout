@@ -9,9 +9,10 @@ export type ControlPoint = readonly [number, number, number];
  *   la normale est la direction du point de piste vers cet axe. Le vaisseau y reste plaqué.
  * - tunnel : portion couverte (visuel, acoustique : réverbération, plafond, occlusion).
  * - colonnade : rangées de piliers le long des murs (réflexions saccadées, « flutter echo »).
+ * - jump : tremplin (bosse franche suivie d'une descente) : les vaisseaux y décollent.
  */
 export interface ZoneSpec {
-  readonly kind: 'magnetic' | 'tunnel' | 'colonnade';
+  readonly kind: 'magnetic' | 'tunnel' | 'colonnade' | 'jump';
   readonly from: number;
   readonly to: number;
   readonly center?: ControlPoint;
@@ -68,6 +69,11 @@ export class Track {
   readonly rights: Vector3[] = [];
   readonly ups: Vector3[] = [];
   readonly curvature: Float32Array;
+  /**
+   * Courbure en tangage (rad/m) : positive dans un creux (la surface se relève vers la normale),
+   * négative sur une bosse. Au-delà de ce que la sustentation retient, le vaisseau décolle.
+   */
+  readonly pitch: Float32Array;
   /** 1 dans les zones magnétiques (loopings, tire-bouchons), 0 ailleurs. */
   readonly magnetic: Uint8Array;
   readonly zones: Zone[] = [];
@@ -147,6 +153,13 @@ export class Track {
       raw[i] = (dt.dot(this.rights[i]) / (2 * this.spacing)) * (1 - nearMagnetic[i]);
     }
     this.curvature = this.smooth(raw, 3);
+
+    const rawPitch = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      dt.subVectors(this.tangents[(i + 1) % n], this.tangents[(i - 1 + n) % n]);
+      rawPitch[i] = this.magnetic[i] ? 0 : dt.dot(this.ups[i]) / (2 * this.spacing);
+    }
+    this.pitch = this.smooth(rawPitch, 2);
   }
 
   /** Indice d'échantillon de chaque point de contrôle (recherche monotone le long du tour). */
@@ -221,6 +234,16 @@ export class Track {
   curvatureAt(s: number): number {
     const { i, j, f } = this.index(s);
     return this.curvature[i] * (1 - f) + this.curvature[j] * f;
+  }
+
+  pitchAt(s: number): number {
+    const { i, j, f } = this.index(s);
+    return this.pitch[i] * (1 - f) + this.pitch[j] * f;
+  }
+
+  isMagnetic(s: number): boolean {
+    const { i, j, f } = this.index(s);
+    return (f < 0.5 ? this.magnetic[i] : this.magnetic[j]) === 1;
   }
 
   /** La zone du type demandé qui contient `s`, s'il y en a une. */

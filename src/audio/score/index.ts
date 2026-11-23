@@ -1,8 +1,12 @@
 import type { SoundFile } from '../imuse/types';
-import { NEON_RIDGE } from './neonRidge';
 import { DEFEAT, VICTORY } from './stingers';
+import { DEFAULT_THEMES } from './themes';
 
 export * from './ids';
+export { buildThemes, DEFAULT_THEMES, hasAuthored, seedFor, seedFromUrl, styleFor, themeFor } from './themes';
 
-/** Tous les sons de la bande-son, à enregistrer dans le pilote. */
-export const SOUNDTRACK: readonly SoundFile[] = [NEON_RIDGE, VICTORY, DEFEAT];
+/** Jingles de fin de course. */
+export const STINGERS: readonly SoundFile[] = [VICTORY, DEFEAT];
+
+/** Toute la bande-son par défaut : un thème par circuit et les jingles. */
+export const SOUNDTRACK: readonly SoundFile[] = [...DEFAULT_THEMES.values(), ...STINGERS];

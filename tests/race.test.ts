@@ -171,3 +171,49 @@ describe('physique', () => {
     expect(ship.u).toBeGreaterThan(70);
   });
 });
+
+describe('sauts', () => {
+  /** Un tour sur l'axe de la piste, plein gaz, à vitesse donnée ; mesure le temps de vol. */
+  function lap(id: string, speed: number) {
+    const t = tracks.get(id)!;
+    const race = new Race(t, DIFFICULTIES.pro);
+    race.start(DIFFICULTIES.pro);
+    const ship = race.player;
+    ship.s = 0;
+    ship.input.thrust = 1;
+    let airTime = 0;
+    let maxH = 0;
+    const jumpAir = new Map<number, number>();
+    const jumps = t.zones.filter((z) => z.kind === 'jump');
+    let landings = 0;
+    while (ship.s < t.length) {
+      ship.u = speed;
+      stepShip(ship, t, PHYSICS_STEP);
+      ship.x = 0;
+      ship.psi = 0;
+      ship.w = 0;
+      if (ship.landImpact > 0) landings++;
+      if (!ship.airborne) continue;
+      airTime += PHYSICS_STEP;
+      maxH = Math.max(maxH, ship.h);
+      const k = jumps.findIndex((z) => ship.s >= z.from - 20 && ship.s <= z.to + 150);
+      if (k >= 0) jumpAir.set(k, (jumpAir.get(k) ?? 0) + PHYSICS_STEP);
+    }
+    return { airTime, maxH, jumpAir, jumps: jumps.length, landings, lapTime: t.length / speed };
+  }
+
+  it.each(CIRCUITS.map((c) => c.id))('%s : chaque tremplin fait décoller un vaisseau lancé, sans vol démesuré', (id) => {
+    const r = lap(id, DIFFICULTIES.pro.vmax);
+    expect(r.jumps).toBeGreaterThan(0);
+    for (let k = 0; k < r.jumps; k++) expect(r.jumpAir.get(k) ?? 0, `tremplin ${k}`).toBeGreaterThan(0.4);
+    expect(r.maxH).toBeLessThan(22);
+    // on vole sur les tremplins et quelques bosses, pas la moitié du tour
+    expect(r.airTime / r.lapTime).toBeLessThan(0.25);
+    expect(r.landings).toBeGreaterThanOrEqual(r.jumps);
+  });
+
+  it('à petite vitesse, on passe le tremplin sans décoller', () => {
+    const r = lap('neon', 20);
+    expect(r.jumpAir.size).toBe(0);
+  });
+});

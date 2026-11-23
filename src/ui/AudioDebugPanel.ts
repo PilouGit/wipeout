@@ -20,6 +20,14 @@ const TRIGGERS: readonly (readonly [SfxName, string])[] = [
   ['speedPad', 'Speed pad'], ['plasma', 'Plasma'], ['missile', 'Missile'], ['collision', 'Collision'], ['scrape', 'Frottement'], ['shieldAlert', 'Alerte bouclier'],
 ];
 
+/** Accès du panneau aux thèmes musicaux (banc d'essai des graines). */
+export interface MusicBench {
+  /** Circuit affiché, nom et style de son thème, graine (null = version écrite à la main), tempo. */
+  current(): { circuit: string; name: string; style: string; seed: number | null; bpm: number; authored: boolean };
+  /** Régénère le thème du circuit affiché avec cette graine (null = version écrite). */
+  reseed(seed: number | null): void;
+}
+
 /**
  * Banc d'essai acoustique (touche F2) : interrupteurs pour comparer, réglage manuel du moteur,
  * déclenchement des bruitages, et radar vu de dessus des rayons réfléchis autour du joueur.
@@ -34,12 +42,31 @@ export class AudioDebugPanel {
   private postsCache: { track: unknown; list: ReturnType<typeof posts> } | null = null;
   private frameCount = 0;
 
-  constructor(private readonly sfx: () => WipeoutAudioEngine | null, private readonly trigger: (name: SfxName) => void) {
+  private readonly musicInfo: HTMLElement;
+  private readonly seedInput: HTMLInputElement;
+
+  constructor(
+    private readonly sfx: () => WipeoutAudioEngine | null,
+    private readonly trigger: (name: SfxName) => void,
+    private readonly music: MusicBench,
+  ) {
     const root = (this.root = document.createElement('div'));
     root.id = 'audioDebug';
     root.className = 'panel';
     root.innerHTML = `
-      <div class="ad-title">ACOUSTIQUE <span>F2</span></div>
+      <div class="ad-title">MUSIQUE <span>F2</span></div>
+      <div class="ad-music">
+        <div class="ad-music-info"></div>
+        <div class="ad-buttons">
+          <button data-seed="prev">◀</button>
+          <input type="number" min="0" step="1" data-seed-input>
+          <button data-seed="next">▶</button>
+          <button data-seed="random">Hasard</button>
+          <button data-seed="authored">Écrite</button>
+        </div>
+        <div class="ad-hint">Choisir une graine à l'oreille, puis la reporter dans <code>audio/score/themes.ts</code>.</div>
+      </div>
+      <div class="ad-title">ACOUSTIQUE</div>
       <div class="ad-options">${OPTION_LABELS.map(([k, l]) => `<label><input type="checkbox" data-opt="${k}" checked> ${l}</label>`).join('')}</div>
       <div class="ad-bench">
         <label><input type="checkbox" data-bench> Banc d'essai moteur (aussi au menu)</label>
@@ -53,6 +80,23 @@ export class AudioDebugPanel {
     document.body.appendChild(root);
     this.radar = root.querySelector('canvas')!.getContext('2d')!;
     this.readout = root.querySelector('.ad-readout')!;
+    this.musicInfo = root.querySelector('.ad-music-info')!;
+    this.seedInput = root.querySelector('[data-seed-input]')!;
+    const reseed = (seed: number | null) => {
+      this.music.reseed(seed === null ? null : seed >>> 0);
+      this.refreshMusic();
+    };
+    root.querySelectorAll<HTMLButtonElement>('[data-seed]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const cur = this.music.current().seed ?? 0;
+        const k = b.dataset.seed;
+        if (k === 'prev') reseed(Math.max(0, cur - 1));
+        else if (k === 'next') reseed(cur + 1);
+        else if (k === 'random') reseed(Math.floor(Math.random() * 1e6));
+        else reseed(null);
+      }),
+    );
+    this.seedInput.addEventListener('change', () => reseed(Number(this.seedInput.value) || 0));
 
     root.querySelectorAll<HTMLInputElement>('[data-opt]').forEach((box) =>
       box.addEventListener('change', () => {
@@ -85,6 +129,14 @@ export class AudioDebugPanel {
 
   set visible(v: boolean) {
     this.root.style.display = v ? 'block' : 'none';
+    if (v) this.refreshMusic();
+  }
+
+  private refreshMusic(): void {
+    const c = this.music.current();
+    this.musicInfo.textContent = `${c.name} · ${c.style} · ${c.bpm} BPM · ${c.seed === null ? 'version écrite' : `graine ${c.seed}`}`;
+    this.seedInput.value = c.seed === null ? '' : String(c.seed);
+    this.root.querySelector<HTMLButtonElement>('[data-seed="authored"]')!.style.display = c.authored ? '' : 'none';
   }
 
   update(race: Race): void {

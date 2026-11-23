@@ -25,7 +25,7 @@ export const MAX_VOLUME = 127;
 export type InstrumentId =
   | 'kick' | 'snare' | 'clap' | 'hat' | 'openhat' | 'perc'
   | 'acid' | 'reese' | 'stab' | 'pad' | 'pluck' | 'lead'
-  | 'riser' | 'impact' | 'alarm';
+  | 'riser' | 'impact' | 'alarm' | 'growl';
 
 export interface PartDef {
   readonly name: string;
@@ -135,6 +135,18 @@ export interface MusicalPosition {
   readonly measure: number;
   readonly beat: number;
   readonly tick: number;
+}
+
+/** Horloge musicale continue d'un son, pour synchroniser des visuels. */
+export interface MusicalClock {
+  readonly chunk: number;
+  /** Temps fractionnaire dans la mesure, 0..BEATS_PER_BAR. */
+  readonly beat: number;
+  /** Mesure dans le chunk (peut valoir -1 un court instant après un saut). */
+  readonly bar: number;
+  /** Tempo effectif (bpm × vitesse) en temps par seconde. */
+  readonly beatsPerSecond: number;
+  readonly transpose: number;
 }
 
 /**

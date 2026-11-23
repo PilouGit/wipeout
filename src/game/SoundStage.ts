@@ -80,7 +80,7 @@ export class SoundStage {
     const f = this.race.track.frameAt(ship.s, this.frame);
     src.s = ship.s;
     src.x = ship.x;
-    src.position.copy(f.p).addScaledVector(f.r, ship.x).addScaledVector(f.u, HOVER_HEIGHT);
+    src.position.copy(f.p).addScaledVector(f.r, ship.x).addScaledVector(f.u, HOVER_HEIGHT + ship.h);
     // vitesse monde : (u, w) exprimés dans le repère du vaisseau, tourné de psi
     const c = Math.cos(ship.psi);
     const sn = Math.sin(ship.psi);
@@ -98,7 +98,7 @@ export class SoundStage {
   }
 
   private at(ship: Ship): { position: Vector3; s: number } {
-    return { position: this.race.track.pointAt(ship.s, ship.x, HOVER_HEIGHT, new Vector3()), s: ship.s };
+    return { position: this.race.track.pointAt(ship.s, ship.x, HOVER_HEIGHT + ship.h, new Vector3()), s: ship.s };
   }
 
   private playAt(name: SfxName, ship: Ship, intensity = 1): void {
