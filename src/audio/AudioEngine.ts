@@ -1,5 +1,5 @@
 import { LITE } from '../core/device';
-import { IMuse, LOOKAHEAD } from './imuse/IMuse';
+import { IMuse } from './imuse/IMuse';
 import { MusicPulse, silentFeatures, type MusicFeatures } from './imuse/MusicPulse';
 import { WebAudioOutput } from './imuse/WebAudioOutput';
 import { buildThemes, hasAuthored, seedFor, seedFromUrl, STINGERS, themeFor } from './score';
@@ -67,14 +67,19 @@ export class AudioEngine {
       void this.ctx.resume();
       return;
     }
-    const ctx = (this.ctx = new AudioContext({ latencyHint: 'interactive' }));
+    // mobile : tampon de sortie un peu plus long (le retard est compensé par outputLatency et la
+    // calibration), sans quoi le moindre pic de charge du thread audio s'entend comme un grésillement
+    const ctx = (this.ctx = new AudioContext({ latencyHint: LITE ? 'balanced' : 'interactive' }));
     this.master = ctx.createGain();
     this.master.gain.value = this._muted ? 0 : MASTER_VOLUME;
-    this.master.connect(ctx.destination);
+    // limiteur de sortie : musique + moteurs + bruitages ne dépassent jamais 0 dBFS
+    // (au-delà, l'écrêtage numérique s'entend comme un grésillement, surtout sur un haut-parleur de téléphone)
+    const limiter = new DynamicsCompressorNode(ctx, { threshold: -2, knee: 0, ratio: 20, attack: 0.002, release: 0.12 });
+    this.master.connect(limiter).connect(ctx.destination);
     this.sfx = new WipeoutAudioEngine(ctx, this.master, LITE);
     const music = new GainNode(ctx, { gain: 0.85 });
     music.connect(this.master);
-    const pulse = (this.pulse = new MusicPulse(new WebAudioOutput(ctx, music)));
+    const pulse = (this.pulse = new MusicPulse(new WebAudioOutput(ctx, music, LITE ? 1.6 : 2.8)));
     const imuse = (this.imuse = new IMuse(pulse, [...this.themes.values(), ...STINGERS]));
     setInterval(() => imuse.update(), MUSIC_TICK_MS);
   }
@@ -123,14 +128,6 @@ export class AudioEngine {
     return (this.ctx?.currentTime ?? 0) - this.outputLatency - this._calibration;
   }
 
-  /**
-   * Avance de l'ordonnanceur musical sur ce qu'entend le joueur (s) : une décision prise maintenant
-   * (hook) ne peut plus toucher la musique entendue avant ce délai.
-   */
-  get schedulingLead(): number {
-    return this.outputLatency + this._calibration + LOOKAHEAD + MUSIC_TICK_MS / 1000 + 0.02;
-  }
-
   /** Horloge du thème à l'instant entendu (section comprise). */
   heardClock(): MusicalClock | null {
     const m = this.imuse;
@@ -138,16 +135,23 @@ export class AudioEngine {
     return m.clock(this.themeSound, this.heardTime());
   }
 
-  /** Horloge audio du contexte (s) et sa correspondance avec `performance.now()` (ms). */
-  contextTimeAt(perfMs: number): number | null {
+  /** Instant entendu sans le retard calibré (pour mesurer ce retard). */
+  rawHeardTime(): number {
+    return (this.ctx?.currentTime ?? 0) - this.outputLatency;
+  }
+
+  /** Clic de métronome à l'instant audio `time` (calibration). */
+  click(time: number, accent: boolean): void {
     const ctx = this.ctx;
-    if (!ctx) return null;
-    const ts = ctx.getOutputTimestamp?.();
-    if (!ts || ts.contextTime === undefined || ts.performanceTime === undefined || ts.performanceTime === 0) {
-      return ctx.currentTime - (performance.now() - perfMs) / 1000;
-    }
-    // l'horodatage de sortie décrit ce qui sort des haut-parleurs : on le ramène à l'horloge d'ordonnancement
-    return ts.contextTime + (perfMs - ts.performanceTime) / 1000 + this.outputLatency;
+    if (!ctx) return;
+    const o = new OscillatorNode(ctx, { type: 'square', frequency: accent ? 1760 : 1320 });
+    const g = new GainNode(ctx, { gain: 0.0001 });
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(accent ? 0.45 : 0.3, time + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.06);
+    o.connect(g).connect(this.master);
+    o.start(time);
+    o.stop(time + 0.08);
   }
 
   /** Contexte audio (null avant init). */

@@ -27,6 +27,8 @@ const SPIN = 1 / 32;
 const SPECTRUM_AMP = 26;
 const WAVE_AMP = 12;
 const SPARK_AMP = 5;
+/** Phase spatiale de la houle au tempo (rad/m). */
+const RIPPLE_K = 0.018;
 
 export interface GroundField {
   readonly center: Vector3;
@@ -52,6 +54,12 @@ export class ReactiveGround {
   private readonly seed: Float32Array;
   /** Éclat permis (0..1) : les colonnes qui bordent la piste restent sobres pour la lisibilité. */
   private readonly near: Float32Array;
+  /** sin et cos de la phase spatiale de la houle, précalculés (pas de sinus par colonne et par image). */
+  private readonly rippleSin: Float32Array;
+  private readonly rippleCos: Float32Array;
+  /** Fronts et intensités des ondes de kick de l'image (réutilisés : pas d'allocation par image). */
+  private fronts = new Float32Array(0);
+  private fades = new Float32Array(0);
   private paletteShift = 0;
   private readonly height: InstancedBufferAttribute;
   private readonly glow: InstancedBufferAttribute;
@@ -90,6 +98,8 @@ export class ReactiveGround {
     this.maxH = new Float32Array(n);
     this.seed = new Float32Array(n);
     this.near = new Float32Array(n);
+    this.rippleSin = new Float32Array(n);
+    this.rippleCos = new Float32Array(n);
     const tint = new Float32Array(n);
 
     // hauteur permise : sous la piste, on garde de la place pour les vaisseaux
@@ -113,6 +123,8 @@ export class ReactiveGround {
       mesh.setMatrixAt(i, m.makeTranslation(x, GROUND_Y, z));
       const d = Math.hypot(x - center.x, z - center.z);
       this.dc[i] = d;
+      this.rippleSin[i] = Math.sin(d * RIPPLE_K);
+      this.rippleCos[i] = Math.cos(d * RIPPLE_K);
       this.rn[i] = d / radius;
       this.ang[i] = fract(Math.atan2(z - center.z, x - center.x) / (Math.PI * 2));
       this.seed[i] = fract(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453);
@@ -138,13 +150,26 @@ export class ReactiveGround {
     const f = bands.features;
     const spec = bands.spectrumNorm;
     const spin = f.beats * SPIN;
+    // ondes des kicks : fronts et intensités de l'image (tableaux réutilisés)
     const ages = f.waveAge;
     const strengths = f.waveStrength;
     const nw = ages.length;
-    const fronts = ages.map((a) => a * WAVE_SPEED);
-    const fades = ages.map((a, k) => strengths[k] * Math.exp(-a * 0.8));
-    const beatPhase = f.beats * Math.PI * 0.5; // une ondulation par temps
+    if (this.fronts.length !== nw) {
+      this.fronts = new Float32Array(nw);
+      this.fades = new Float32Array(nw);
+    }
+    const fronts = this.fronts;
+    const fades = this.fades;
+    for (let k = 0; k < nw; k++) {
+      fronts[k] = ages[k] * WAVE_SPEED;
+      fades[k] = strengths[k] * Math.exp(-ages[k] * 0.8);
+    }
+    // houle au tempo (une ondulation par temps) : sin(a − b) développé, a précalculé par colonne
+    const beatPhase = f.beats * Math.PI * 0.5;
+    const cosB = Math.cos(beatPhase);
+    const sinB = Math.sin(beatPhase);
     const sparkSlot = Math.floor(f.beats * 4); // une double croche
+    const sparkLimit = bands.highN * 0.08;
     const swell = 1.5 + 4.5 * bands.energy;
     const h = this.height.array as Float32Array;
     const g = this.glow.array as Float32Array;
@@ -153,33 +178,43 @@ export class ReactiveGround {
     const level = stage.intensity;
     const calmLevel = Math.max(0.12, level);
     const pop = stage.cut * 9;
+    const cutGlow = stage.cut * 0.8;
+    const glowRipple = bands.energy * 0.15 * calmLevel;
     const mix = stage.patternMix;
     const cur = stage.pattern;
     const prev = stage.previousPattern;
-    const at = (p: Pattern, ang: number, rn: number) => this.bandPosition(p, ang, rn, spin) * last;
+    const curGain = cur === PATTERN.CALM ? 0.25 : 1;
+    const prevGain = (prev === PATTERN.CALM ? 0.25 : 1) * (1 - mix);
+    // lissage exponentiel (cf. follow) : coefficients communs à tout le champ
+    const hRise = 1 - Math.exp(-dt * RISE);
+    const hFall = 1 - Math.exp(-dt * FALL);
+    const gRise = 1 - Math.exp(-dt * RISE * 1.5);
+    const gFall = 1 - Math.exp(-dt * FALL * 1.4);
+    const { rn: rnA, dc, ang: angA, seed, maxH, near, rippleSin, rippleCos } = this;
 
     for (let i = 0; i < this.count; i++) {
-      const rn = this.rn[i];
-      const d = this.dc[i];
+      const rn = rnA[i];
+      const d = dc[i];
+      const ang = angA[i];
       // spectre (normalisé) déplié selon le motif de la section ; fondu enchaîné après une coupe
-      let s = sample(spec, at(cur, this.ang[i], rn), last) * (cur === PATTERN.CALM ? 0.25 : 1);
-      if (mix < 1) s = s * mix + sample(spec, at(prev, this.ang[i], rn), last) * (prev === PATTERN.CALM ? 0.25 : 1) * (1 - mix);
-      // ondes des kicks
+      let s = sample(spec, bandPosition(cur, ang, rn, spin) * last, last) * curGain;
+      if (mix < 1) s = s * mix + sample(spec, bandPosition(prev, ang, rn, spin) * last, last) * prevGain;
       let w = 0;
       for (let k = 0; k < nw; k++) {
         const x = (d - fronts[k]) / WAVE_WIDTH;
         if (x > -3 && x < 3) w += fades[k] * Math.exp(-x * x);
       }
-      // houle au tempo, qui part du centre
-      const ripple = 0.5 + 0.5 * Math.sin(d * 0.018 - beatPhase);
+      const ripple = 0.5 + 0.5 * (rippleSin[i] * cosB - rippleCos[i] * sinB);
       // étincelles sur les charlestons
-      const spark = fract(this.seed[i] * 7.31 + sparkSlot * 0.618) < bands.highN * 0.08 ? 1 : 0;
+      const spark = fract(seed[i] * 7.31 + sparkSlot * 0.618) < sparkLimit ? 1 : 0;
 
       const lift = (s * SPECTRUM_AMP + w * WAVE_AMP + spark * SPARK_AMP) * level + ripple * swell * calmLevel + pop * (1 - rn * 0.5);
-      const target = Math.min(this.maxH[i], REST + lift);
-      h[i] = follow(h[i], target, dt, RISE, FALL);
-      const glowTarget = Math.min(1.6, (s * 0.85 + w * 0.9 + spark * 1.2) * level + ripple * bands.energy * 0.15 * calmLevel + stage.cut * 0.8) * this.near[i];
-      g[i] = follow(g[i], glowTarget, dt, RISE * 1.5, FALL * 1.4);
+      const target = Math.min(maxH[i], REST + lift);
+      const hi = h[i];
+      h[i] = hi + (target - hi) * (target > hi ? hRise : hFall);
+      const glowTarget = Math.min(1.6, (s * 0.85 + w * 0.9 + spark * 1.2) * level + ripple * glowRipple + cutGlow) * near[i];
+      const gi = g[i];
+      g[i] = gi + (glowTarget - gi) * (glowTarget > gi ? gRise : gFall);
     }
     this.height.needsUpdate = true;
     this.glow.needsUpdate = true;
@@ -188,22 +223,6 @@ export class ReactiveGround {
     this.uniforms.uShift.value = this.paletteShift + stage.palette;
   }
 
-  /** Position (0..1, graves → aigus) dans le spectre d'une colonne, selon le motif. */
-  private bandPosition(p: Pattern, ang: number, rn: number, spin: number): number {
-    switch (p) {
-      case PATTERN.SPIRAL:
-        // bras de spirale tournant au tempo : chaque bande couvre tout le champ
-        return Math.abs(fract(ang * ARMS + rn * TWIST - spin) * 2 - 1);
-      case PATTERN.RINGS:
-        // anneaux concentriques qui partent du centre à chaque temps
-        return Math.abs(fract(rn * 3 - spin * 8) * 2 - 1);
-      case PATTERN.SECTORS:
-        // secteurs tournants, en sens inverse de la spirale
-        return Math.abs(fract(ang * 6 + spin * 2) * 2 - 1);
-      default:
-        return rn;
-    }
-  }
 
   /** Au repos (ou hors musique) : ondulation lente pour que le sol vive quand même. */
   idle(dt: number, beats: number): void {
@@ -296,4 +315,21 @@ function sample(spec: Float32Array, bp: number, last: number): number {
 
 function fract(x: number): number {
   return x - Math.floor(x);
+}
+
+/** Position (0..1, graves → aigus) dans le spectre d'une colonne, selon le motif. */
+function bandPosition(p: Pattern, ang: number, rn: number, spin: number): number {
+  switch (p) {
+    case PATTERN.SPIRAL:
+      // bras de spirale tournant au tempo : chaque bande couvre tout le champ
+      return Math.abs(fract(ang * ARMS + rn * TWIST - spin) * 2 - 1);
+    case PATTERN.RINGS:
+      // anneaux concentriques qui partent du centre à chaque temps
+      return Math.abs(fract(rn * 3 - spin * 8) * 2 - 1);
+    case PATTERN.SECTORS:
+      // secteurs tournants, en sens inverse de la spirale
+      return Math.abs(fract(ang * 6 + spin * 2) * 2 - 1);
+    default:
+      return rn;
+  }
 }

@@ -1,19 +1,21 @@
 import type { Vector3 } from 'three';
 import type { Reflection } from './AcousticWorld';
 import { TAP_KINDS } from './AcousticWorld';
-import { driveCurve, glide } from './dsp';
+import { driveCurve, glide, kRate } from './dsp';
 
 /** Atténuation de distance commune à toutes les sources (modèle « inverse »). */
 export const REF_DISTANCE = 6;
 
 export function createPanner(ctx: AudioContext, hrtf: boolean): PannerNode {
-  return new PannerNode(ctx, {
+  const p = new PannerNode(ctx, {
     panningModel: hrtf ? 'HRTF' : 'equalpower',
     distanceModel: 'inverse',
     refDistance: REF_DISTANCE,
     rolloffFactor: 1,
     maxDistance: 5000,
   });
+  kRate(p.positionX, p.positionY, p.positionZ, p.orientationX, p.orientationY, p.orientationZ);
+  return p;
 }
 
 /** Gain appliqué par un panner « inverse » à distance d. */
@@ -50,6 +52,7 @@ export class ReflectionNetwork {
       const delay = ctx.createDelay(0.06);
       const filter = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 4000, Q: 0.9 });
       const gain = new GainNode(ctx, { gain: 0 });
+      kRate(filter.frequency, filter.Q);
       const panner = createPanner(ctx, hrtf);
       this.input.connect(delay).connect(filter).connect(gain).connect(panner).connect(destination);
       return { delay, filter, gain, panner };
@@ -125,6 +128,8 @@ export class EngineVoice {
   private readonly panner: PannerNode;
   private readonly send: GainNode;
   private readonly sources: AudioScheduledSourceNode[];
+  private readonly outputs: AudioNode[];
+  private connected = true;
 
   constructor(ctx: AudioContext, noise: AudioBuffer, buses: { engines: AudioNode; reverb: AudioNode }, quality: VoiceQuality) {
     this.saw = new OscillatorNode(ctx, { type: 'sawtooth', frequency: 50 });
@@ -161,9 +166,27 @@ export class EngineVoice {
     if (this.reflections) this.voice.connect(this.reflections.input);
     this.send = new GainNode(ctx, { gain: 0 });
     this.voice.connect(this.send).connect(buses.reverb);
+    this.outputs = [this.occlusionFilter, this.send, ...(this.reflections ? [this.reflections.input] : [])];
 
+    kRate(
+      this.saw.frequency, this.tri.frequency,
+      this.lowpass.frequency, this.lowpass.Q, this.turbine.frequency, this.turbine.Q,
+      this.air.frequency, this.air.Q, this.occlusionFilter.frequency, this.occlusionFilter.Q,
+    );
     this.sources = [this.saw, this.tri, n1, n2];
     for (const s of this.sources) s.start();
+  }
+
+  /**
+   * Branche ou débranche la voix. Débranchée, rien de ce qui la compose n'est plus tiré par la sortie,
+   * donc plus calculé : un vaisseau hors de portée ne coûte rien au thread audio (à volume nul,
+   * oscillateurs, filtres et panners tourneraient pour rien).
+   */
+  setActive(on: boolean): void {
+    if (on === this.connected) return;
+    this.connected = on;
+    if (on) for (const o of this.outputs) this.voice.connect(o);
+    else this.voice.disconnect();
   }
 
   setPosition(position: Vector3, t: number): void {

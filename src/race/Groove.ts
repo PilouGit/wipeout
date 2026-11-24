@@ -32,16 +32,21 @@ const PASSIVE_SLACK = 1.4;
 export const MAX_STREAK = 8;
 const STREAK_TIMEOUT_BARS = 4;
 
-/** Impulsion de la touche de rythme (m/s) : base + par palier de série, ×1,3 si parfait, ×1,25 sur le premier temps. */
-// une série parfaite tenue à chaque temps vaut environ +9 % de vitesse de pointe
-const PULSE_BASE = 1.2;
-const PULSE_PER_STREAK = 0.45;
+/**
+ * Impulsion de la touche de rythme (m/s) : base + par palier de série, ×1,3 si parfait, ×1,25 sur le premier temps.
+ * Une série parfaite tenue à chaque temps vaut environ +4 % de vitesse de pointe : un avantage
+ * qui se sent, pas une stratégie qui écrase le pilotage (les IA groovent aussi, selon la difficulté).
+ */
+// la traînée ne ramène la vitesse vers la pointe qu'à ~0,33/s : une impulsion à chaque temps
+// s'accumule. À 150 BPM, 0,5 m/s par temps en pleine série donne ~+4 % de vitesse d'équilibre.
+const PULSE_BASE = 0.15;
+const PULSE_PER_STREAK = 0.045;
 /** Contretemps : petite perte de vitesse (m/s). */
 const MISS_PENALTY = 3;
 /** Pad pris sur le temps : boost prolongé (s). */
 const PAD_BOOST = 2;
 /** Atterrissage sur le temps (m/s). */
-const LAND_BONUS = 7;
+const LAND_BONUS = 5;
 
 /**
  * Le rythme comme mécanique de pilotage : la touche de rythme (Maj) jouée sur le temps donne
@@ -106,5 +111,40 @@ export class Groove {
         break;
     }
     return { action, grade, offset, downbeat, streak: this.streak };
+  }
+}
+
+/**
+ * Les adversaires pilotent en rythme eux aussi : à chaque temps, chaque IA « joue » avec une
+ * probabilité qui dépend de la difficulté, avec sa propre série (un temps manqué la remet à zéro).
+ * Sans cela, la touche de rythme serait un avantage que seul le joueur possède.
+ */
+export class GrooveAI {
+  private readonly streaks = new Map<Ship, number>();
+  private lastBeat = Number.NEGATIVE_INFINITY;
+
+  reset(): void {
+    this.streaks.clear();
+    this.lastBeat = Number.NEGATIVE_INFINITY;
+  }
+
+  /** À chaque pas de simulation : agit une fois par temps entendu. */
+  update(ships: readonly Ship[], sample: BeatSample | null, chance: number, rand: () => number = Math.random): void {
+    if (!sample) return;
+    const beat = Math.floor(sample.beats);
+    if (beat === this.lastBeat) return;
+    this.lastBeat = beat;
+    const downbeat = Math.floor(sample.inBar) === 0;
+    for (const ship of ships) {
+      if (ship.isPlayer || ship.dead || ship.finished) continue;
+      if (rand() >= chance) {
+        this.streaks.set(ship, 0);
+        continue;
+      }
+      const streak = Math.min(MAX_STREAK, (this.streaks.get(ship) ?? 0) + 1);
+      this.streaks.set(ship, streak);
+      // une IA n'est jamais « parfaite » : impulsion d'un coup juste
+      ship.u += (PULSE_BASE + PULSE_PER_STREAK * (streak - 1)) * (downbeat ? 1.25 : 1);
+    }
   }
 }

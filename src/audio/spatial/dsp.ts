@@ -59,3 +59,20 @@ export function glide(param: AudioParam, value: number, t: number, tc: number, e
   lastTarget.set(param, value);
   param.setTargetAtTime(value, t, tc);
 }
+
+/**
+ * Passe des paramètres automatisés en continu (à chaque image) au calcul par bloc de 128 échantillons.
+ * En « a-rate », un filtre dont la fréquence glisse recalcule ses coefficients à chaque échantillon,
+ * un panner sa direction (et le HRTF son interpolation) : c'est l'essentiel du coût des moteurs
+ * sur le thread audio. Les glissements durent 20 à 100 ms, un pas de 2,7 ms est inaudible.
+ * Pas pour les retards (delayTime) : un saut de retard s'entend comme un clic.
+ */
+export function kRate(...params: AudioParam[]): void {
+  for (const p of params) {
+    try {
+      p.automationRate = 'k-rate';
+    } catch {
+      /* navigateur sans automationRate (ou paramètre figé) : on garde l'a-rate */
+    }
+  }
+}

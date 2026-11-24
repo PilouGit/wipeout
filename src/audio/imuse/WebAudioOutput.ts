@@ -21,9 +21,10 @@ export class WebAudioOutput implements MusicOutput {
   private readonly shared: SynthShared;
   private readonly impulse: AudioBuffer;
 
-  constructor(private readonly ctx: AudioContext, private readonly destination: AudioNode) {
+  /** @param reverbSeconds durée de la réverbération (son coût de convolution lui est proportionnel) */
+  constructor(private readonly ctx: AudioContext, private readonly destination: AudioNode, reverbSeconds = 2.8) {
     this.shared = createShared(ctx);
-    this.impulse = makeImpulse(ctx, 2.8);
+    this.impulse = makeImpulse(ctx, reverbSeconds);
   }
 
   now(): number {

@@ -1,5 +1,5 @@
 import {
-  AdditiveBlending, BufferAttribute, BufferGeometry, Color, LineBasicMaterial, LineSegments, Points, PointsMaterial,
+  AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, Color, LineBasicMaterial, LineSegments, Points, PointsMaterial,
   type Scene,
 } from 'three';
 import type { TapKind } from '../audio/spatial/AcousticWorld';
@@ -33,7 +33,11 @@ export class AcousticRaysView {
     const pg = new BufferGeometry();
     pg.setAttribute('position', new BufferAttribute(this.hitPos, 3));
     pg.setAttribute('color', new BufferAttribute(this.hitCol, 3));
-    this.hits = new Points(pg, new PointsMaterial({ vertexColors: true, size: 0.9, transparent: true, blending: AdditiveBlending, depthTest: false }));
+    // un petit disque de taille fixe à l'écran : un carré de 0,9 m grossissait près de la caméra
+    // jusqu'à passer pour un objet du décor
+    this.hits = new Points(pg, new PointsMaterial({
+      vertexColors: true, size: 9, sizeAttenuation: false, map: disc(), transparent: true, blending: AdditiveBlending, depthTest: false,
+    }));
     this.lines.renderOrder = this.hits.renderOrder = 10;
     this.lines.frustumCulled = this.hits.frustumCulled = false;
     this.visible = false;
@@ -68,4 +72,18 @@ export class AcousticRaysView {
     pg.attributes.position.needsUpdate = true;
     pg.attributes.color.needsUpdate = true;
   }
+}
+
+/** Texture d'un disque doux (points d'impact ronds). */
+function disc(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.8)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 32, 32);
+  return new CanvasTexture(c);
 }

@@ -6,7 +6,16 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#07030f">
-  <title>Hyperglide</title>
+  <title>Hyperglide · course anti-gravité au rythme de la musique</title>
+  <meta name="description" content="Hyperglide : course anti-gravité gratuite dans le navigateur, sur ordinateur et mobile. Une musique interactive façon iMUSE, synthétisée en temps réel, qui réagit à votre pilotage.">
+  <link rel="canonical" href="https://wipeout.pilou.online/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="fr_FR">
+  <meta property="og:title" content="Hyperglide · course anti-gravité au rythme de la musique">
+  <meta property="og:description" content="Course anti-gravité dans le navigateur, avec une musique interactive qui réagit à votre pilotage.">
+  <meta property="og:url" content="https://wipeout.pilou.online/">
+  <meta property="og:image" content="https://wipeout.pilou.online/presentation/img/partage.jpg">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 L28 28 L16 22 L4 28 Z' fill='%232ef2ff'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
@@ -56,8 +65,10 @@
           <button data-d="pro">PRO</button>
           <button data-d="elite">ÉLITE</button>
         </div>
+        <button id="calibBtn" class="calib-btn" title="Calibrer le rythme">♪ <span class="calib-label">CALIBRER LE RYTHME · </span><span id="calibValue">0 ms</span></button>
         <button class="go" id="startBtn">COURSE</button>
       </div>
+      <a class="about-link" href="presentation/">How it's made · technical article (EN)</a>
       <details class="help">
         <summary>COMMANDES</summary>
         <div class="controls touch-only">
@@ -80,6 +91,22 @@
         </div>
         <div class="hint">Les chevrons donnent un boost. Le bouclier se recharge après la ligne d'arrivée. Dans les loopings et tire-bouchons, la piste est magnétique : gardez les gaz. Pad franchi ou atterrissage sur le temps : bonus.</div>
       </details>
+    </div>
+  </div>
+
+  <div id="calib" class="overlay hidden">
+    <div class="card">
+      <h2>RYTHME</h2>
+      <div class="hint">Casque sans fil, téléviseur, réflexes : chaque installation a son retard. Frappez sur chaque clic
+        (<span class="desktop-only">MAJ, ESPACE ou clic</span><span class="touch-only">touchez la zone</span>) ; le jeu s'y accordera.</div>
+      <div class="calib-pad"><div class="calib-count">0 / 16</div></div>
+      <div class="calib-result hint"></div>
+      <div class="diffs">
+        <button class="go" id="calibAccept" disabled>VALIDER</button>
+        <button id="calibRetry">RECOMMENCER</button>
+        <button id="calibReset">ZÉRO</button>
+        <button id="calibCancel">ANNULER</button>
+      </div>
     </div>
   </div>
 

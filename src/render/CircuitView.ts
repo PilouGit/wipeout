@@ -1,4 +1,4 @@
-import { Group, type Camera, type Scene } from 'three';
+import { Group, type Camera, type Object3D, type Scene } from 'three';
 import type { MusicFeatures } from '../audio/imuse/MusicPulse';
 import type { Pad } from '../race/pads';
 import type { Circuit } from '../track/circuits';
@@ -31,9 +31,24 @@ export class CircuitView {
     this.environment.accent(strength);
   }
 
+  /** Dôme du ciel (rendu à part, en basse définition). */
+  get skyDome(): Object3D {
+    return this.environment.skyDome;
+  }
+
+  /** Facteur de bloom voulu par la mise en scène musicale. */
+  get bloom(): number {
+    return this.environment.bloom;
+  }
+
   /** Des dragons sont hors du sol (pour la musique). */
   get dragonsActive(): boolean {
     return this.environment.dragonsActive;
+  }
+
+  /** Racines du décor dans la scène. */
+  get roots(): readonly Object3D[] {
+    return [this.root, this.environment.sky];
   }
 
   set visible(v: boolean) {

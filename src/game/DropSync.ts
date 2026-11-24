@@ -45,18 +45,44 @@ export function musicCues(track: Track): MusicCues {
   return { drops: kept.sort((a, b) => a - b), calms: calms.filter((z) => kept.includes(z.to)) };
 }
 
-/** Point de décollage d'un tremplin : la crête (courbure en tangage la plus négative). */
+/**
+ * Point de décollage d'un tremplin : là où la bosse devient assez franche pour arracher le vaisseau,
+ * c.-à-d. le premier point dont la courbure en tangage atteint 60 % de celle de la crête.
+ */
 function takeoff(track: Track, from: number, to: number): number {
-  let best = from;
+  let crest = from;
   let min = Infinity;
   for (let s = from; s <= to; s += track.spacing) {
     const k = track.pitchAt(s);
     if (k < min) {
       min = k;
-      best = s;
+      crest = s;
     }
   }
-  return best;
+  for (let s = from; s <= crest; s += track.spacing) if (track.pitchAt(s) <= min * 0.6) return s;
+  return crest;
+}
+
+/**
+ * Temps pour parcourir `d` mètres à la vitesse `v` avec l'accélération `a`, la vitesse étant
+ * plafonnée à `vmax` (le vaisseau qui sort d'un virage ou de la grille rattrape sa vitesse de pointe).
+ */
+export function arrivalTime(d: number, v: number, a: number, vmax: number): number {
+  v = Math.max(1, v);
+  if (Math.abs(a) < 0.5) return d / v;
+  if (a > 0) {
+    const top = Math.max(v, vmax);
+    const tTop = (top - v) / a;
+    const dTop = v * tTop + 0.5 * a * tTop * tTop;
+    if (d >= dTop) return tTop + (d - dTop) / top;
+    return (-v + Math.sqrt(v * v + 2 * a * d)) / a;
+  }
+  // décélération : on ne prévoit pas en dessous de la moitié de la vitesse actuelle
+  const floor = v * 0.5;
+  const tFloor = (floor - v) / a;
+  const dFloor = v * tFloor + 0.5 * a * tFloor * tFloor;
+  if (d >= dFloor) return tFloor + (d - dFloor) / floor;
+  return (-v + Math.sqrt(v * v + 2 * a * d)) / a;
 }
 
 export interface DropPlan {
@@ -81,32 +107,41 @@ const FILL_BEATS = 4;
  * @param bps tempo actuel (temps/s)
  * @param baseBps tempo nominal du thème (temps/s)
  * @param factor facteur de tempo actuel (pour rester stable d'une image à l'autre)
- * @param lead avance de l'ordonnanceur sur ce qu'on entend (s)
+ * @param ahead barres de mesure déjà lues par l'ordonnanceur mais pas encore entendues (0, 1…) :
+ *   le hook posé maintenant agira sur la première barre que l'ordonnanceur n'a pas encore lue
+ * @param keep barre visée jusqu'ici (en mesures) : on la garde tant qu'elle reste atteignable,
+ *   pour que le tempo ne saute pas d'une cible à l'autre au gré des variations de vitesse
  */
-export function planDrop(eta: number, inBar: number, bps: number, baseBps: number, factor: number, lead: number): DropPlan | null {
-  if (!(eta > 0) || bps <= 0) return null;
+export function planDrop(eta: number, inBar: number, baseBps: number, factor: number, ahead: number, keep: number | null = null): DropPlan | null {
+  if (!(eta > 0)) return null;
   const toBar = BEATS_PER_BAR - inBar;
+  if (keep !== null && keep >= 0) {
+    const hookBeats = toBar + BEATS_PER_BAR * keep;
+    const f = (hookBeats + FILL_BEATS) / (eta * baseBps);
+    if (keep >= ahead && f >= SYNC_MIN && f <= SYNC_MAX) return plan(keep, f);
+  }
   let best: { n: number; f: number; cost: number } | null = null;
-  for (let n = 0; n < 40; n++) {
+  // les barres déjà lues par l'ordonnanceur sont trop tard
+  for (let n = ahead; n < 40; n++) {
     const hookBeats = toBar + BEATS_PER_BAR * n;
-    // barre déjà lue par l'ordonnanceur : trop tard pour elle
-    if (hookBeats / bps <= lead) continue;
     const f = (hookBeats + FILL_BEATS) / (eta * baseBps);
     const clamped = Math.min(SYNC_MAX, Math.max(SYNC_MIN, f));
     // hors plage : pénalité forte (écart résiduel) ; dans la plage : rester près du tempo actuel
-    const cost = Math.abs(f - clamped) * 100 + Math.abs(clamped - factor);
+    const cost = Math.abs(f - clamped) * 100 + Math.abs(clamped - factor) + Math.abs(clamped - 1);
     if (!best || cost < best.cost) best = { n, f: clamped, cost };
     if (f > SYNC_MAX) break;
   }
-  if (!best) return null;
-  const hookBeats = toBar + BEATS_PER_BAR * best.n;
-  const hookIn = hookBeats / bps - lead;
-  return {
-    factor: best.f,
-    arm: hookIn > 0 && hookIn <= BEATS_PER_BAR / bps,
-    bars: best.n,
-    error: (hookBeats + FILL_BEATS) / (best.f * baseBps) - eta,
-  };
+  return best ? plan(best.n, best.f) : null;
+
+  function plan(n: number, f: number): DropPlan {
+    const hookBeats = toBar + BEATS_PER_BAR * n;
+    return {
+      factor: f,
+      arm: n === ahead,
+      bars: n,
+      error: (hookBeats + FILL_BEATS) / (f * baseBps) - eta,
+    };
+  }
 }
 
 /** Pendant la montée (déjà engagée) : il reste `beatsLeft` temps avant le drop, on ajuste le tempo. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TRACK_HALF_WIDTH } from '../src/config';
-import { musicCues, planDrop, SYNC_MAX, SYNC_MIN, trimDrop } from '../src/game/DropSync';
+import { musicCues, planDrop, SYNC_MAX, SYNC_MIN, trimDrop, type DropPlan } from '../src/game/DropSync';
 import { CIRCUITS } from '../src/track/circuits';
 import { Track } from '../src/track/Track';
 
@@ -15,12 +15,19 @@ function simulate(distance: number, speed: number, phase: number, lead = 0.2, dt
   let factor = 1;
   let t = 0;
   let dropAt: number | null = null; // en temps entendus
+  let keep: number | null = null;
+  let lastInBar = ((phase % 4) + 4) % 4;
   while (t < 30) {
     const eta = (distance - speed * t);
     if (eta <= 0) break;
     if (dropAt === null) {
-      const plan = planDrop(eta / speed, ((beats % 4) + 4) % 4, BPS * factor, BPS, factor, lead)!;
+      const inBar = ((beats % 4) + 4) % 4;
+      if (keep !== null && inBar < lastInBar - 2) keep--;
+      lastInBar = inBar;
+      const ahead = Math.floor((beats + lead * BPS * factor) / 4) - Math.floor(beats / 4);
+      const plan: DropPlan = planDrop(eta / speed, inBar, BPS, factor, ahead, keep)!;
       factor = plan.factor;
+      keep = plan.bars;
       // le hook est lu par l'ordonnanceur à la prochaine barre située au-delà de l'avance
       if (plan.arm) dropAt = Math.ceil((beats + lead * BPS * factor) / 4) * 4 + 4;
     } else {
@@ -48,7 +55,8 @@ describe('synchro du drop sur le circuit', () => {
       if (t > 4) v = 75;
       const eta = (target - s) / v;
       if (dropAt === null) {
-        const plan = planDrop(eta, ((beats % 4) + 4) % 4, BPS * factor, BPS, factor, 0.2)!;
+        const ahead = Math.floor((beats + 0.2 * BPS * factor) / 4) - Math.floor(beats / 4);
+        const plan = planDrop(eta, ((beats % 4) + 4) % 4, BPS, factor, ahead)!;
         factor = plan.factor;
         if (plan.arm) dropAt = Math.ceil((beats + 0.2 * BPS * factor) / 4) * 4 + 4;
       } else factor = trimDrop(eta, dropAt - beats, BPS);
@@ -62,7 +70,7 @@ describe('synchro du drop sur le circuit', () => {
   it('le tempo reste dans sa plage, et le plus près possible du tempo courant', () => {
     for (let eta = 2; eta < 14; eta += 0.37) {
       for (let phase = 0; phase < 4; phase += 0.5) {
-        const p = planDrop(eta, phase, BPS, BPS, 1, 0.2)!;
+        const p = planDrop(eta, phase, BPS, 1, phase > 3.5 ? 1 : 0)!;
         expect(p.factor).toBeGreaterThanOrEqual(SYNC_MIN);
         expect(p.factor).toBeLessThanOrEqual(SYNC_MAX);
         // au-delà de 6 s, il existe toujours une barre atteignable sans sortir de la plage

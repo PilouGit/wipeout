@@ -1,8 +1,9 @@
-import { Vector3 } from 'three';
+import { type Object3D, Vector3 } from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { DIFFICULTIES, HOVER_HEIGHT, PHYSICS_STEP, SHIP_HALF_WIDTH, TRACK_HALF_WIDTH } from '../config';
 import { TOUCH } from '../core/device';
 import { PerformanceMonitor } from './Performance';
+import { Calibration } from '../ui/Calibration';
 import { Input } from '../core/Input';
 import { Race } from '../race/Race';
 import { createInput, type Ship } from '../race/Ship';
@@ -10,7 +11,7 @@ import { TEAMS, teamById } from '../race/teams';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { CircuitView } from '../render/CircuitView';
 import { Sparks, SpeedLines } from '../render/effects';
-import { Renderer } from '../render/Renderer';
+import { BLOOM_STRENGTH, Renderer } from '../render/Renderer';
 import { ShipView } from '../render/ShipView';
 import { createTextures, type Textures } from '../render/textures';
 import { WeaponView } from '../render/WeaponView';
@@ -104,6 +105,8 @@ export class Game {
     this.music.setDragonSource(() => this.view.dragonsActive);
     this.stage = new SoundStage(this.audio, this.race, camera);
     this.rays = new AcousticRaysView(scene);
+    // calibration du retard (menu) : la musique se tait le temps du métronome
+    new Calibration(this.audio, { onOpen: () => this.music.setPaused(true), onClose: () => this.music.setPaused(false) });
     this.audioPanel = new AudioDebugPanel(() => this.audio.sfx, (name) => this.triggerSfx(name), {
       current: () => {
         const c = this.selection.circuit;
@@ -164,6 +167,7 @@ export class Game {
       this.views.set(circuit.id, view);
     }
     view.setQualityDrop(this.perf.drop);
+    this.renderer.sky = view.skyDome;
     for (const v of this.views.values()) v.visible = v === view;
     this.view = view;
     this.renderer.setAtmosphere(circuit.theme);
@@ -171,6 +175,14 @@ export class Game {
     const theme = this.audio.themes.get(circuit.id);
     if (this.music && theme) this.music.setTheme(theme);
     this.hud.setTrack(track);
+    this.warmUp();
+  }
+
+  /** Shaders du circuit affiché, des vaisseaux et des effets compilés d'avance (pas de saccade en course). */
+  private warmUp(): void {
+    const others = new Set<Object3D>();
+    for (const v of this.views.values()) if (v !== this.view) for (const r of v.roots) others.add(r);
+    this.renderer.warmUp((o) => others.has(o));
   }
 
   private select(change: Partial<MenuSelection>): void {
@@ -199,6 +211,7 @@ export class Game {
     this.updateTouch();
     this.music.enterRace();
     for (const v of this.shipViews) v.visible = true;
+    this.warmUp();
   }
 
   private toMenu(): void {
@@ -393,6 +406,7 @@ export class Game {
       this.renderer.camera.updateMatrixWorld();
       this.previewPlayerShip(time);
       this.view.update(dt, time, this.renderer.camera, this.audio.musicFeatures());
+      this.renderer.bloomStrength = BLOOM_STRENGTH * this.view.bloom;
       this.weaponView.update(this.race.weapons, this.track, time);
       this.speedLines.update(dt, 0, 0);
       this.renderer.render();
@@ -478,6 +492,7 @@ export class Game {
     const ratio = this.camera.follow(dt, p, this.track);
     this.shipViews[this.race.ships.indexOf(p)].visible = !p.dead && this.camera.mode === 'chase';
     this.view.update(dt, time, this.renderer.camera, this.audio.musicFeatures());
+    this.renderer.bloomStrength = BLOOM_STRENGTH * this.view.bloom;
     this.speedLines.update(dt, p.speed, ratio + (p.boostTime > 0 ? 0.3 : 0));
     this.hud.update(this.race, p);
     this.hud.beat(this.race.phase === 'racing' ? this.audio.beatSample() : null, this.race.groove.streak);

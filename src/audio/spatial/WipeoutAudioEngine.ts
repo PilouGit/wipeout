@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import type { Track } from '../../track/Track';
 import { AcousticWorld, createReflections, dopplerRatio, type Reflection } from './AcousticWorld';
-import { createNoise, tunnelImpulse } from './dsp';
+import { createNoise, kRate, tunnelImpulse } from './dsp';
 import { createPanner, EngineVoice } from './EngineVoice';
 import { SFX, type SfxContext, type SfxName } from './Sfx';
 
@@ -136,6 +136,8 @@ export class WipeoutAudioEngine {
     this.reverbShelf = new BiquadFilterNode(ctx, { type: 'lowshelf', frequency: 220, gain: 0 });
     const reverbOut = new GainNode(ctx, { gain: 0.55 });
     this.reverbIn.connect(conv).connect(this.reverbShelf).connect(reverbOut).connect(this.out);
+    const l = ctx.listener;
+    if (l.positionX) kRate(l.positionX, l.positionY, l.positionZ, l.forwardX, l.forwardY, l.forwardZ, l.upX, l.upY, l.upZ);
   }
 
   /** Monde acoustique d'un circuit (construit une fois). */
@@ -166,8 +168,10 @@ export class WipeoutAudioEngine {
       dbg.audible = src.active && dist < AUDIBLE_RANGE;
       if (!dbg.audible) {
         voice.engine.set({ speed: 0, thrust: 0, airbrake: 0, doppler: 1, occlusion: 0, reverbSend: 0, level: 0 }, t);
+        voice.engine.setActive(false);
         continue;
       }
+      voice.engine.setActive(true);
 
       // réflexions précoces (sondes gauche / droite / haut / poteaux)
       const net = voice.engine.reflections;

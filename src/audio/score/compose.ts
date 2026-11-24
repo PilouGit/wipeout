@@ -4,7 +4,8 @@
  *
  *   INTRO ──GRID (chaque mesure)──▶ GRID ──CRUISE (chaque temps)──▶ CRUISE
  *   CRUISE ──DRIVE (mes. 4, 8)──▶ FILL_UP ─▶ DRIVE ──CRUISE (mes. 4, 8)──▶ CRUISE
- *   CRUISE / DRIVE ──BREAKDOWN (mes. 4, 8)──▶ BREAKDOWN ──CRUISE/DRIVE (toutes les 2 mes.)
+ *   CRUISE / DRIVE ──BREAKDOWN (toutes les 2 mes.)──▶ BREAKDOWN ──CRUISE/DRIVE (toutes les 2 mes.)
+ *   CRUISE / DRIVE / BREAKDOWN ──DROP (chaque mesure)──▶ FILL_UP ─▶ DRIVE   (drop calé sur le circuit)
  *   * ──FINAL (mes. 4, 8)──▶ FILL_FINAL (+modulation) ─▶ FINAL
  *   * ──FINISH (chaque mesure)──▶ OUTRO ─▶ [marqueur OUTRO_END] fin
  *

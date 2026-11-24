@@ -21,12 +21,14 @@ export interface Difficulty {
   readonly accel: number;
   /** Multiplicateur de vitesse de base de l'IA. */
   readonly ai: number;
+  /** Probabilité qu'une IA joue chaque temps (elle aussi pilote en rythme). */
+  readonly groove: number;
 }
 
 export const DIFFICULTIES: Readonly<Record<DifficultyKey, Difficulty>> = {
-  novice: { vmax: 78, accel: 26, ai: 0.86 },
-  pro: { vmax: 92, accel: 30, ai: 0.93 },
-  elite: { vmax: 108, accel: 35, ai: 0.98 },
+  novice: { vmax: 78, accel: 26, ai: 0.86, groove: 0.3 },
+  pro: { vmax: 92, accel: 30, ai: 0.93, groove: 0.55 },
+  elite: { vmax: 108, accel: 35, ai: 0.98, groove: 0.8 },
 };
 
 /** Nombre de vaisseaux en course (joueur compris). */

@@ -71,7 +71,8 @@ export class AcousticWorld {
   private readonly postsL: Post[];
   private readonly postsR: Post[];
   private readonly inTunnel: Uint8Array;
-  private readonly hash = new Map<string, number[]>();
+  /** Échantillons de la piste par cellule de 24 m (clé numérique : pas de chaîne allouée par requête). */
+  private readonly hash = new Map<number, number[]>();
   private readonly f = createFrame();
   private readonly fp = createFrame();
   private readonly S = new Vector3();
@@ -91,7 +92,8 @@ export class AcousticWorld {
       for (let i = Math.floor(z.from / track.spacing); i <= Math.ceil(z.to / track.spacing) && i < track.count; i++) this.inTunnel[i] = 1;
     }
     for (let i = 0; i < track.count; i++) {
-      const key = this.cellKey(track.points[i], 0, 0, 0);
+      const p = track.points[i];
+      const key = cellKey(Math.floor(p.x / HASH_CELL), Math.floor(p.y / HASH_CELL), Math.floor(p.z / HASH_CELL));
       let list = this.hash.get(key);
       if (!list) this.hash.set(key, (list = []));
       list.push(i);
@@ -241,13 +243,18 @@ export class AcousticWorld {
   private nearestSample(p: Vector3): number {
     let best = -1;
     let bestD = HASH_CELL * HASH_CELL;
+    const cx = Math.floor(p.x / HASH_CELL);
+    const cy = Math.floor(p.y / HASH_CELL);
+    const cz = Math.floor(p.z / HASH_CELL);
+    const points = this.track.points;
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dz = -1; dz <= 1; dz++) {
-          const list = this.hash.get(this.cellKey(p, dx, dy, dz));
+          const list = this.hash.get(cellKey(cx + dx, cy + dy, cz + dz));
           if (!list) continue;
-          for (const i of list) {
-            const d = this.track.points[i].distanceToSquared(p);
+          for (let k = 0; k < list.length; k++) {
+            const i = list[k];
+            const d = points[i].distanceToSquared(p);
             if (d < bestD) {
               bestD = d;
               best = i;
@@ -259,7 +266,13 @@ export class AcousticWorld {
     return best;
   }
 
-  private cellKey(p: Vector3, dx: number, dy: number, dz: number): string {
-    return `${Math.floor(p.x / HASH_CELL) + dx},${Math.floor(p.y / HASH_CELL) + dy},${Math.floor(p.z / HASH_CELL) + dz}`;
-  }
+}
+
+/**
+ * Clé d'une cellule : 10 bits par axe (entier « small int », sans allocation). Le repliement tous
+ * les 1024 cellules (24 km) ne peut que proposer des échantillons lointains, que le test de
+ * distance écarte : le résultat est exact.
+ */
+function cellKey(x: number, y: number, z: number): number {
+  return ((x & 1023) << 20) | ((y & 1023) << 10) | (z & 1023);
 }

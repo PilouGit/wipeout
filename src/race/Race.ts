@@ -2,7 +2,7 @@ import { AI_SKILLS, FIELD_SIZE, LAPS, RECHARGE_ZONE, type Difficulty } from '../
 import { Emitter } from '../core/Emitter';
 import type { Track } from '../track/Track';
 import { AIDriver, type AIContext } from './AIDriver';
-import { Groove, type BeatSample, type GrooveResult } from './Groove';
+import { Groove, GrooveAI, type BeatSample, type GrooveResult } from './Groove';
 import { createPads, PAD_TRIGGER_HALF_LENGTH, PAD_TRIGGER_HALF_WIDTH, type Pad } from './pads';
 import { stepShip } from './physics';
 import { Ship, type ItemKind } from './Ship';
@@ -65,6 +65,9 @@ export class Race {
   time = 0;
   /** Rythme du joueur (série d'actions sur le temps). */
   readonly groove = new Groove();
+  /** Les IA jouent le temps elles aussi (probabilité selon la difficulté). */
+  private readonly grooveAI = new GrooveAI();
+  private grooveChance = 0;
   /** Position musicale entendue, fournie par le jeu ; null = pas de musique, pas de jugement. */
   beat: () => BeatSample | null = () => null;
 
@@ -118,6 +121,8 @@ export class Race {
     });
     this.weapons.clear();
     this.groove.reset();
+    this.grooveAI.reset();
+    this.grooveChance = difficulty.groove;
     this.time = 0;
     this.countdownLeft = COUNTDOWN_SECONDS + 1;
     this.lastCount = -1;
@@ -165,7 +170,9 @@ export class Race {
       }
     }
 
-    this.groove.update(dt, this.beat());
+    const sample = this.beat();
+    this.groove.update(dt, sample);
+    this.grooveAI.update(this.ships, sample, this.grooveChance);
     this.resolveCollisions();
     this.handlePads(dt);
     this.weapons.update(dt, this.ships, (ship, hit, by) => this.applyHit(ship, hit, by));

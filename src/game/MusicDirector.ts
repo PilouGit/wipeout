@@ -6,7 +6,7 @@ import { DRAGON, HOOK, JUMP, MAIN, MARKER, SOUND, SPEED, TENSION, type MainChunk
 import { clamp } from '../core/math';
 import type { Race } from '../race/Race';
 import type { Track } from '../track/Track';
-import { musicCues, planDrop, trimDrop, type MusicCues } from './DropSync';
+import { arrivalTime, musicCues, planDrop, trimDrop, type MusicCues } from './DropSync';
 
 type Mode = 'menu' | 'race' | 'ending';
 type Section = 'INTRO' | 'GRID' | 'CRUISE' | 'DRIVE' | 'BREAKDOWN' | 'FINAL' | 'OUTRO';
@@ -91,6 +91,18 @@ export class MusicDirector {
   /** Le hook DROP a été posé pour ce rendez-vous (une montée « naturelle » ne compte pas). */
   private syncArmed = false;
   private dropHold = 0;
+  /** Accélération lissée du joueur (m/s²), pour prévoir son heure d'arrivée. */
+  private accel = 0;
+  private lastSpeed = 0;
+  /** Barre visée (mesures restantes avant le saut) et dernière position dans la mesure. */
+  private syncBars: number | null = null;
+  /**
+   * Vitesse de l'horloge audio par rapport au temps réel (le jeu avance en temps réel, la musique
+   * en temps audio : sur certaines sorties, l'écart atteint plusieurs pour cent).
+   */
+  private audioRate = 1;
+  private rateRef: { audio: number; real: number } | null = null;
+  private lastInBar = 0;
   /** Dernier écart mesuré entre le drop entendu et l'arrivée sur le rendez-vous (s), pour le débogage. */
   lastDropError: number | null = null;
 
@@ -314,6 +326,15 @@ export class MusicDirector {
     if (!clock || cues.drops.length === 0) return { approach: false, arm: false, calm, eta: Infinity };
     const baseBps = this.theme.bpm / 60;
     const speed = Math.max(1, p.speed);
+    if (dt > 0) this.accel += ((p.speed - this.lastSpeed) / dt - this.accel) * Math.min(1, dt * 2);
+    this.lastSpeed = p.speed;
+    const vmax = p.perf.vmax * (p.boostTime > 0 ? 1.15 : 1);
+    // l'accélération ne sert qu'à prévoir la reprise de vitesse (départ, sortie de virage) ;
+    // les à-coups (pads, chocs) sont rattrapés par la replanification
+    const climbing = p.speed < vmax * 0.92 ? Math.min(10, Math.max(0, this.accel)) : 0;
+    this.measureAudioRate();
+    // heure d'arrivée convertie en temps audio : c'est sur cette horloge que la musique avance
+    const arrival = (d: number) => arrivalTime(d, speed, climbing, vmax) * this.audioRate;
 
     // rendez-vous en cours : on le garde jusqu'à le franchir
     if (this.syncTarget !== null && p.s >= this.syncTarget) {
@@ -323,13 +344,14 @@ export class MusicDirector {
     if (this.syncTarget === null) {
       const ahead = cues.drops.map((s) => p.s + ((s - sm + L) % L)).filter((s) => s - p.s > 1);
       const next = Math.min(...ahead);
-      const nextEta = (next - p.s) / speed;
+      const nextEta = arrival(next - p.s);
       if (nextEta < SYNC_APPROACH && p.speed > SYNC_MIN_SPEED) {
         this.syncTarget = next;
         this.syncCommitted = this.syncArmed = false;
+        this.syncBars = null;
       } else return { approach: false, arm: false, calm, eta: nextEta };
     }
-    const eta = (this.syncTarget - p.s) / speed;
+    const eta = arrival(this.syncTarget - p.s);
     if (p.speed < SYNC_MIN_SPEED * 0.6) {
       // le joueur s'est arrêté : on abandonne ce rendez-vous
       this.syncTarget = null;
@@ -348,14 +370,38 @@ export class MusicDirector {
       }
       return { approach: true, arm: false, calm: false, eta };
     }
-    const plan = planDrop(eta, clock.beat, clock.beatsPerSecond, baseBps, this.syncFactor, this.audio.schedulingLead);
+    // une barre de mesure franchie : la barre visée se rapproche d'une mesure
+    if (this.syncBars !== null && clock.beat < this.lastInBar - 2) this.syncBars--;
+    this.lastInBar = clock.beat;
+    // l'horloge entendue et la position de l'ordonnanceur se rapportent à la même section :
+    // l'écart de leurs numéros de mesure est le nombre de barres lues mais pas encore entendues
+    const sched = this.audio.imuse?.position(this.sound);
+    const ahead = sched ? Math.max(0, sched.measure - clock.bar) : 1;
+    const plan = planDrop(eta, clock.beat, baseBps, this.syncFactor, ahead, this.syncBars);
     if (!plan) return { approach: false, arm: false, calm, eta };
     this.syncFactor = plan.factor;
+    this.syncBars = plan.bars;
     this.lastDropError = plan.error;
     // une montée naturelle en cours : pas de nouveau saut avant d'en être sorti
     if (clock.chunk === MAIN.FILL_UP) return { approach: true, arm: false, calm, eta };
     if (plan.arm) this.syncArmed = true;
     return { approach: true, arm: plan.arm, calm, eta };
+  }
+
+  private measureAudioRate(): void {
+    const ctx = this.audio.context;
+    if (!ctx) return;
+    const now = { audio: ctx.currentTime, real: performance.now() / 1000 };
+    const ref = this.rateRef;
+    if (!ref || now.real - ref.real > 5 || now.real < ref.real) {
+      this.rateRef = now;
+      return;
+    }
+    const span = now.real - ref.real;
+    if (span < 1) return;
+    const rate = (now.audio - ref.audio) / span;
+    if (rate > 0.5 && rate < 1.5) this.audioRate += (rate - this.audioRate) * 0.5;
+    this.rateRef = now;
   }
 
   /** Touché : la musique « encaisse » puis revient (fondu immédiat + fondu différé). */

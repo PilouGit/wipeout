@@ -1,4 +1,5 @@
 import { BackSide, Color, Mesh, ShaderMaterial, SphereGeometry, Vector3 } from 'three';
+import { SKY_LAYER } from '../layers';
 import { follow, type MusicBands } from './MusicBands';
 import type { Staging } from './Staging';
 
@@ -176,6 +177,7 @@ export class MusicSky {
       }),
     );
     this.mesh.renderOrder = -10;
+    this.mesh.layers.set(SKY_LAYER);
   }
 
   /** Ciel allégé : moins d'octaves de bruit pour les nuages (recompile le shader). */

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DIFFICULTIES, PHYSICS_STEP, TRACK_HALF_WIDTH } from '../src/config';
-import { Groove, MAX_STREAK, type BeatSample } from '../src/race/Groove';
+import { Groove, GrooveAI, MAX_STREAK, type BeatSample } from '../src/race/Groove';
 import { Race } from '../src/race/Race';
 import { Ship } from '../src/race/Ship';
 import { TEAMS } from '../src/race/teams';
@@ -86,7 +86,8 @@ describe('groove (actions sur le temps)', () => {
       race.beat = music ? () => at(race.time * BPS) : () => null;
       let lastBeat = -1;
       for (let t = 0; t < 40; t += PHYSICS_STEP) {
-        race.player.input.thrust = 1;
+        const pl = race.player;
+        if (race.phase === 'racing') (race as unknown as { drivers: Map<unknown, { update(s: unknown, dt: number, c: unknown): void }>; aiContext: unknown }).drivers.get(pl)!.update(pl, PHYSICS_STEP, (race as unknown as { aiContext: unknown }).aiContext);
         const beat = Math.round(race.time * BPS);
         if (press && race.phase === 'racing' && beat !== lastBeat && Math.abs(race.time * BPS - beat) < 0.02) {
           race.player.input.pulse = true;
@@ -100,11 +101,55 @@ describe('groove (actions sur le temps)', () => {
     const idle = run(true, false);
     const onBeat = run(true, true);
     expect(onBeat.best).toBe(MAX_STREAK);
+    // un avantage qui se sent, sans écraser le pilotage
     expect(onBeat.s).toBeGreaterThan(idle.s * 1.02);
+    expect(onBeat.s).toBeLessThan(idle.s * 1.06);
     // sans musique, la touche n'a aucun effet
     const silent = run(false, false);
     const silentPress = run(false, true);
     expect(silentPress.best).toBe(0);
     expect(silentPress.s).toBeCloseTo(silent.s, 6);
+  });
+});
+
+describe('les IA groovent aussi', () => {
+  const rival = () => {
+    const s = new Ship(false, TEAMS[1], DIFFICULTIES.pro);
+    s.u = 80;
+    return s;
+  };
+
+  it('une fois par temps, selon la probabilité de la difficulté, jamais pour le joueur', () => {
+    const ai = new GrooveAI();
+    const a = rival();
+    const p = ship();
+    // plusieurs pas dans le même temps : une seule impulsion
+    for (const b of [0.01, 0.2, 0.6]) ai.update([a, p], at(b), 1);
+    expect(a.u).toBeGreaterThan(80);
+    const once = a.u;
+    ai.update([a, p], at(0.9), 1);
+    expect(a.u).toBe(once);
+    expect(p.u).toBe(80);
+    // probabilité nulle : rien
+    const b = rival();
+    const ai0 = new GrooveAI();
+    for (let k = 0; k < 16; k++) ai0.update([b], at(k + 0.01), 0);
+    expect(b.u).toBe(80);
+  });
+
+  it('un bon groover (élite) gagne plus qu’un débutant, la série grandit et retombe sur un temps manqué', () => {
+    const gain = (chance: number) => {
+      let seed = 7;
+      const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const ai = new GrooveAI();
+      const s = rival();
+      for (let k = 0; k < 64; k++) ai.update([s], at(k + 0.01), chance, rand);
+      return s.u - 80;
+    };
+    expect(gain(DIFFICULTIES.elite.groove)).toBeGreaterThan(gain(DIFFICULTIES.novice.groove) * 1.5);
+    // série parfaite de 64 temps : la touche ne doit pas valoir plus que quelques % de la vitesse de pointe
+    // (impulsion par temps ≤ ~4 % de la vitesse de pointe, freinée ensuite par la traînée)
+    const perBeat = gain(1) / 64;
+    expect(perBeat).toBeLessThan(DIFFICULTIES.pro.vmax * 0.04);
   });
 });

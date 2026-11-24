@@ -84,6 +84,17 @@ abstract class BaseInstrument implements Instrument {
     return f;
   }
 
+  /**
+   * Branche la fin de la chaîne d'une note sur la sortie, et l'en débranche quand la source se tait.
+   * Sans cela, filtres et gains d'une note restent dans le graphe (et calculés à chaque bloc)
+   * jusqu'au passage du ramasse-miettes : des centaines de nœuds morts, de quoi faire décrocher
+   * le thread audio d'un téléphone.
+   */
+  protected out(node: AudioNode, src: AudioScheduledSourceNode): void {
+    node.connect(this.output);
+    src.addEventListener('ended', () => node.disconnect(), { once: true });
+  }
+
   protected gain(): GainNode {
     return this.ctx.createGain();
   }
@@ -105,10 +116,11 @@ class Kick extends BaseInstrument {
     o.frequency.exponentialRampToValueAtTime(50, t + 0.08);
     o.frequency.exponentialRampToValueAtTime(38, t + 0.4);
     const sh = this.shaper();
-    o.connect(g).connect(sh).connect(this.output);
+    this.out(o.connect(g).connect(sh), o);
     const cg = this.gain();
     const cEnd = perc(cg.gain, t, vel(v) * 0.25, 0.012);
-    this.noiseSource(t, cEnd).connect(this.filter('highpass', 3000)).connect(cg).connect(this.output);
+    const click = this.noiseSource(t, cEnd);
+    this.out(click.connect(this.filter('highpass', 3000)).connect(cg), click);
   }
 }
 
@@ -116,12 +128,13 @@ class Snare extends BaseInstrument {
   play(t: number, _n: number, v: number): void {
     const ng = this.gain();
     const end = perc(ng.gain, t, vel(v) * 0.55, 0.2);
-    this.noiseSource(t, end).connect(this.filter('bandpass', 1900, 0.8)).connect(ng).connect(this.output);
+    const n = this.noiseSource(t, end);
+    this.out(n.connect(this.filter('bandpass', 1900, 0.8)).connect(ng), n);
     const tg = this.gain();
     const tEnd = perc(tg.gain, t, vel(v) * 0.45, 0.1);
     const o = this.osc('triangle', 190, t, tEnd);
     o.frequency.exponentialRampToValueAtTime(150, t + 0.1);
-    o.connect(tg).connect(this.output);
+    this.out(o.connect(tg), o);
   }
 }
 
@@ -136,7 +149,8 @@ class Clap extends BaseInstrument {
     }
     g.gain.setValueAtTime(peak, t + 0.033);
     g.gain.exponentialRampToValueAtTime(EPS, t + 0.2);
-    this.noiseSource(t, t + 0.22).connect(this.filter('bandpass', 1200, 1.5)).connect(g).connect(this.output);
+    const n = this.noiseSource(t, t + 0.22);
+    this.out(n.connect(this.filter('bandpass', 1200, 1.5)).connect(g), n);
   }
 }
 
@@ -147,7 +161,8 @@ class Hat extends BaseInstrument {
   play(t: number, _n: number, v: number): void {
     const g = this.gain();
     const end = perc(g.gain, t, vel(v) * 0.22, this.decay);
-    this.noiseSource(t, end).connect(this.filter('highpass', 7200)).connect(this.filter('peaking', 10000, 1)).connect(g).connect(this.output);
+    const n = this.noiseSource(t, end);
+    this.out(n.connect(this.filter('highpass', 7200)).connect(this.filter('peaking', 10000, 1)).connect(g), n);
   }
 }
 
@@ -159,7 +174,7 @@ class Perc extends BaseInstrument {
     const f = mtof(n);
     const o = this.osc('sine', f * 1.5, t, end);
     o.frequency.exponentialRampToValueAtTime(f, t + 0.04);
-    o.connect(g).connect(this.output);
+    this.out(o.connect(g), o);
   }
 }
 
@@ -187,7 +202,7 @@ class Acid extends BaseInstrument {
     g.gain.linearRampToValueAtTime(vel(v) * (accent ? 0.38 : 0.28), t + 0.004);
     g.gain.setValueAtTime(vel(v) * (accent ? 0.38 : 0.28), t + dur);
     g.gain.linearRampToValueAtTime(EPS, end);
-    o.connect(f).connect(this.shaper()).connect(g).connect(this.output);
+    this.out(o.connect(f).connect(this.shaper()).connect(g), o);
   }
 }
 
@@ -201,8 +216,10 @@ class Reese extends BaseInstrument {
     for (const d of [-14, 14]) this.osc('sawtooth', freq, t, end, d).connect(f);
     const sub = this.gain();
     sub.gain.value = 0.9;
-    this.osc('sine', freq / 2, t, end).connect(sub).connect(g);
-    f.connect(g).connect(this.output);
+    const s = this.osc('sine', freq / 2, t, end);
+    s.connect(sub).connect(g);
+    f.connect(g);
+    this.out(g, s);
   }
 }
 
@@ -217,8 +234,9 @@ class Stab extends BaseInstrument {
     f.frequency.exponentialRampToValueAtTime(380, t + 0.22);
     const freq = mtof(n);
     for (const d of [-9, 9]) this.osc('sawtooth', freq, t, end, d).connect(f);
-    this.osc('square', freq / 2, t, end).connect(f);
-    f.connect(g).connect(this.output);
+    const s = this.osc('square', freq / 2, t, end);
+    s.connect(f);
+    this.out(f.connect(g), s);
   }
 }
 
@@ -229,8 +247,9 @@ class Pad extends BaseInstrument {
     const freq = mtof(n);
     const f = this.filter('lowpass', 700 + this.brightness * 10, 1);
     for (const d of [-11, 0, 11]) this.osc('sawtooth', freq, t, end, d).connect(f);
-    this.osc('triangle', freq * 2, t, end).connect(f);
-    f.connect(g).connect(this.output);
+    const s = this.osc('triangle', freq * 2, t, end);
+    s.connect(f);
+    this.out(f.connect(g), s);
   }
 }
 
@@ -243,8 +262,9 @@ class Pluck extends BaseInstrument {
     f.frequency.exponentialRampToValueAtTime(500, t + 0.18);
     const freq = mtof(n);
     this.osc('sawtooth', freq, t, end, -6).connect(f);
-    this.osc('square', freq, t, end, 6).connect(f);
-    f.connect(g).connect(this.output);
+    const s = this.osc('square', freq, t, end, 6);
+    s.connect(f);
+    this.out(f.connect(g), s);
   }
 }
 
@@ -264,7 +284,7 @@ class Lead extends BaseInstrument {
       depth.connect(o.detune);
       o.connect(f);
     }
-    f.connect(g).connect(this.output);
+    this.out(f.connect(g), vib);
   }
 }
 
@@ -295,7 +315,7 @@ class Growl extends BaseInstrument {
       o.frequency.exponentialRampToValueAtTime(freq * 0.75, end);
       o.connect(drive);
     }
-    drive.connect(f).connect(g).connect(this.output);
+    this.out(drive.connect(f).connect(g), rough);
   }
 }
 
@@ -310,7 +330,8 @@ class Riser extends BaseInstrument {
     g.gain.linearRampToValueAtTime(EPS, end + 0.05);
     const f = this.filter('bandpass', 300, 5);
     f.frequency.exponentialRampToValueAtTime(8000, end);
-    this.noiseSource(t, end + 0.06).connect(f).connect(g).connect(this.output);
+    const n = this.noiseSource(t, end + 0.06);
+    this.out(n.connect(f).connect(g), n);
   }
 }
 
@@ -321,10 +342,11 @@ class Impact extends BaseInstrument {
     const bEnd = perc(bg.gain, t, vel(v) * 0.9, 1.4);
     const o = this.osc('sine', 70, t, bEnd);
     o.frequency.exponentialRampToValueAtTime(30, t + 1.2);
-    o.connect(bg).connect(this.output);
+    this.out(o.connect(bg), o);
     const cg = this.gain();
     const cEnd = perc(cg.gain, t, vel(v) * 0.25, 1.8);
-    this.noiseSource(t, cEnd).connect(this.filter('highpass', 4500)).connect(cg).connect(this.output);
+    const n = this.noiseSource(t, cEnd);
+    this.out(n.connect(this.filter('highpass', 4500)).connect(cg), n);
   }
 }
 
@@ -332,7 +354,8 @@ class Alarm extends BaseInstrument {
   play(t: number, n: number, v: number): void {
     const g = this.gain();
     const end = perc(g.gain, t, vel(v) * 0.05, 0.09);
-    this.osc('square', mtof(n), t, end).connect(this.filter('lowpass', 3000)).connect(g).connect(this.output);
+    const o = this.osc('square', mtof(n), t, end);
+    this.out(o.connect(this.filter('lowpass', 3000)).connect(g), o);
   }
 }
 

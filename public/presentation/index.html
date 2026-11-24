@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hyperglide: an anti-gravity racer where the music drives the track</title>
+<meta name="description" content="Hyperglide, an anti-gravity racing game in the browser. Interactive music inspired by iMUSE, fully synthesized with Web Audio, drops timed to the track, rhythm built into the driving, spatial audio. A technical write-up.">
+<meta name="author" content="Pierre-Emmanuel Gros">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://wipeout.pilou.online/presentation/">
+<meta name="theme-color" content="#f7f6f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121316" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="en_US">
+<meta property="og:site_name" content="Hyperglide">
+<meta property="og:title" content="Hyperglide: an anti-gravity racer where the music drives the track">
+<meta property="og:description" content="iMUSE-style interactive music, synthesized live with Web Audio, drops that land on the jump takeoff, rhythm as a driving mechanic. How it is built.">
+<meta property="og:url" content="https://wipeout.pilou.online/presentation/">
+<meta property="og:image" content="https://wipeout.pilou.online/presentation/img/partage.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="An anti-gravity ship speeds along a neon track above a city at night.">
+<meta property="article:author" content="https://www.linkedin.com/in/pierre-emmanuel-gros-ph-d-b337113/">
+<meta property="article:published_time" content="2026-11-24">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Hyperglide: an anti-gravity racer where the music drives the track">
+<meta name="twitter:description" content="iMUSE-style interactive music, synthesized with Web Audio, and a track written like a score.">
+<meta name="twitter:image" content="https://wipeout.pilou.online/presentation/img/partage.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 L28 28 L16 22 L4 28 Z' fill='%231f6f78'/%3E%3C/svg%3E">
+<link rel="preload" as="image" href="img/neon-ridge.webp" fetchpriority="high">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "@id": "https://wipeout.pilou.online/presentation/#article",
+      "headline": "Hyperglide: an anti-gravity racer where the music drives the track",
+      "description": "iMUSE-inspired interactive music, Web Audio synthesis, drop synchronization with the track, rhythm-based driving and spatial audio in a racing game written in TypeScript and Three.js.",
+      "inLanguage": "en",
+      "datePublished": "2026-11-24",
+      "image": "https://wipeout.pilou.online/presentation/img/partage.jpg",
+      "author": { "@id": "https://wipeout.pilou.online/presentation/#author" },
+      "about": { "@id": "https://wipeout.pilou.online/#game" },
+      "keywords": "iMUSE, interactive music, adaptive music, Web Audio, procedural synthesis, Three.js, TypeScript, racing game, anti-gravity, spatial audio, game design"
+    },
+    {
+      "@type": "Person",
+      "@id": "https://wipeout.pilou.online/presentation/#author",
+      "name": "Pierre-Emmanuel Gros",
+      "sameAs": ["https://www.linkedin.com/in/pierre-emmanuel-gros-ph-d-b337113/"]
+    },
+    {
+      "@type": "VideoGame",
+      "@id": "https://wipeout.pilou.online/#game",
+      "name": "Hyperglide",
+      "url": "https://wipeout.pilou.online/",
+      "genre": ["Racing", "Music"],
+      "gamePlatform": ["Web browser", "Mobile", "Desktop"],
+      "playMode": "SinglePlayer",
+      "applicationCategory": "Game",
+      "operatingSystem": "Any system with a WebGL browser",
+      "inLanguage": "fr",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+      "author": { "@id": "https://wipeout.pilou.online/presentation/#author" },
+      "image": "https://wipeout.pilou.online/presentation/img/partage.jpg"
+    }
+  ]
+}
+</script>
+<style>
+  :root {
+    --bg: #f7f6f2; --surface: #ffffff; --text: #1d1f23; --muted: #5d6169; --line: #dcd9d1;
+    --accent: #1f6f78; --accent-soft: #e3efef; --code-bg: #efede7;
+    --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121316; --surface: #1a1c20; --text: #e7e5e0; --muted: #a3a6ad; --line: #2e3137;
+      --accent: #6cc3c9; --accent-soft: #1c2c2e; --code-bg: #1e2024;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 16px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.65 var(--serif); }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:hover { text-decoration-thickness: 2px; }
+  img { max-width: 100%; height: auto; display: block; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+  .wide { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+  .top { border-bottom: 1px solid var(--line); font: 15px/1.4 var(--sans); }
+  .top .wide { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 14px; padding-bottom: 14px; }
+  .brand { font-weight: 700; letter-spacing: .02em; color: var(--text); text-decoration: none; }
+  .top nav { display: flex; gap: 18px; align-items: center; }
+  .btn { display: inline-block; font: 600 15px/1 var(--sans); padding: 11px 18px; border-radius: 6px; background: var(--accent); color: var(--bg); text-decoration: none; }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+
+  header.article { padding: 48px 0 28px; }
+  .kicker { font: 600 13px/1.4 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+  h1 { font: 700 clamp(30px, 5.2vw, 46px)/1.15 var(--sans); letter-spacing: -.015em; margin: 0 0 16px; }
+  .lede { font-size: 21px; line-height: 1.55; color: var(--muted); margin: 0 0 22px; }
+  .byline { font: 15px/1.5 var(--sans); color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+  .byline strong { color: var(--text); }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+
+  figure { margin: 32px 0; }
+  figure.hero { margin: 8px 0 40px; }
+  figure img { border-radius: 6px; background: #0b0613; }
+  figcaption { font: 14px/1.5 var(--sans); color: var(--muted); margin-top: 10px; }
+  .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .gallery figure { margin: 0; }
+
+  h2 { font: 700 27px/1.25 var(--sans); letter-spacing: -.01em; margin: 56px 0 14px; padding-top: 8px; }
+  h3 { font: 700 20px/1.35 var(--sans); margin: 34px 0 8px; }
+  p, ul, ol { margin: 0 0 18px; }
+  li { margin: 0 0 6px; }
+  code { font: .86em/1.4 var(--mono); background: var(--code-bg); padding: .1em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+  pre { font: 14px/1.55 var(--mono); background: var(--code-bg); padding: 16px 18px; border-radius: 6px; overflow-x: auto; margin: 0 0 22px; }
+  pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
+  blockquote { margin: 26px 0; padding: 2px 0 2px 20px; border-left: 3px solid var(--accent); color: var(--muted); font-style: italic; }
+
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 28px 0; font-family: var(--sans); }
+  .facts div { background: var(--surface); padding: 14px 16px; }
+  .facts b { display: block; font-size: 24px; line-height: 1.2; }
+  .facts span { font-size: 13px; color: var(--muted); }
+
+  .toc { font: 15px/1.5 var(--sans); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; margin: 28px 0; }
+  .toc p { font-weight: 700; margin: 0 0 6px; }
+  .toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 28px; }
+  .toc li { break-inside: avoid; }
+
+  .table-scroll { overflow-x: auto; margin: 0 0 22px; }
+  table { width: 100%; border-collapse: collapse; font: 15px/1.45 var(--sans); }
+  th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 700; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+  td code { white-space: nowrap; }
+
+  .note { font: 15px/1.55 var(--sans); background: var(--accent-soft); border-radius: 8px; padding: 14px 18px; margin: 24px 0; }
+  .note b { color: var(--accent); }
+
+  .diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; overflow-x: auto; }
+  .diagram svg { display: block; width: 100%; min-width: 600px; height: auto; font-family: var(--sans); }
+  .diagram svg text { fill: var(--text); }
+  .diagram svg .muted { fill: var(--muted); }
+  .diagram svg .acc { fill: var(--accent); }
+  .diagram svg .box { fill: var(--bg); stroke: var(--line); stroke-width: 1.5; }
+  .diagram svg .box-acc { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+  .diagram svg .ln { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+  .diagram svg .ln-acc { stroke: var(--accent); stroke-width: 2; fill: none; }
+  .diagram svg .dash { stroke-dasharray: 5 4; }
+  .diagram svg .arrow { fill: var(--muted); }
+  .diagram svg .arrow-acc { fill: var(--accent); }
+  .scroll-hint { display: none; font: 13px/1.4 var(--sans); color: var(--muted); margin: 0 0 6px; }
+
+  footer.author { border-top: 1px solid var(--line); margin-top: 64px; padding: 32px 0 56px; font: 16px/1.6 var(--sans); }
+  footer.author h2 { margin-top: 0; font-size: 22px; }
+  footer.author .small { color: var(--muted); font-size: 14px; }
+
+  @media (max-width: 760px) {
+    body { font-size: 17px; }
+    .lede { font-size: 19px; }
+    .facts { grid-template-columns: repeat(2, 1fr); }
+    .toc ol { columns: 1; }
+    .gallery { grid-template-columns: 1fr 1fr; }
+    .top nav .hide-sm { display: none; }
+    h2 { font-size: 24px; margin-top: 44px; }
+    .scroll-hint { display: block; }
+  }
+  @media (max-width: 420px) {
+    .wrap, .wide { padding: 0 16px; }
+    .gallery { grid-template-columns: 1fr; }
+    .btn { padding: 11px 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="wide">
+    <a class="brand" href="./">Hyperglide</a>
+    <nav aria-label="Main navigation">
+      <a class="hide-sm" href="#imuse">iMUSE</a>
+      <a class="hide-sm" href="#score">Track as score</a>
+      <a class="btn" href="../">Play</a>
+    </nav>
+  </div>
+</div>
+
+<main>
+<article>
+  <div class="wrap">
+    <header class="article">
+      <p class="kicker">Technical write-up · Interactive music · Games</p>
+      <h1>Hyperglide: an anti-gravity racer where the music drives the track</h1>
+      <p class="lede">A browser racing game without a single audio file: the soundtrack is composed, synthesized and conducted in real time by an engine inspired by iMUSE, and the track itself is written like a musical score.</p>
+      <div class="byline">
+        <span>By <strong><a href="https://www.linkedin.com/in/pierre-emmanuel-gros-ph-d-b337113/" rel="author noopener" target="_blank">Pierre-Emmanuel Gros</a></strong></span>
+        <span aria-hidden="true">·</span>
+        <time datetime="2026-11-24">November 24, 2026</time>
+        <span aria-hidden="true">·</span>
+        <span>15 min read</span>
+      </div>
+      <div class="cta">
+        <a class="btn" href="../">Play in your browser</a>
+        <a class="btn ghost" href="https://www.linkedin.com/in/pierre-emmanuel-gros-ph-d-b337113/" rel="noopener" target="_blank">Connect on LinkedIn</a>
+      </div>
+    </header>
+  </div>
+
+  <div class="wide">
+    <figure class="hero">
+      <img src="img/neon-ridge.webp" width="1600" height="900" fetchpriority="high"
+           alt="Racing on the Neon Ridge circuit: the player's ship passes under a neon gate, a lit-up city on both sides, a ringed planet and violet plasma clouds in the sky.">
+      <figcaption>Neon Ridge, in-game capture. The sky's clouds, the planet and the hexagonal ground react to the music, read on the audio clock.</figcaption>
+    </figure>
+  </div>
+
+  <div class="wrap">
+    <div class="facts" role="list">
+      <div role="listitem"><b>0</b><span>audio files: everything is synthesized</span></div>
+      <div role="listitem"><b>1</b><span>runtime dependency (Three.js)</span></div>
+      <div role="listitem"><b>~11,300</b><span>lines of TypeScript</span></div>
+      <div role="listitem"><b>140</b><span>automated tests</span></div>
+    </div>
+
+    <nav class="toc" aria-label="Contents">
+      <p>Contents</p>
+      <ol>
+        <li><a href="#game">The game</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#imuse">iMUSE, the idea</a></li>
+        <li><a href="#engine">The engine in detail</a></li>
+        <li><a href="#director">The music director</a></li>
+        <li><a href="#score">The track as a score</a></li>
+        <li><a href="#rhythm">Rhythm as a driving mechanic</a></li>
+        <li><a href="#generation">One soundtrack per circuit</a></li>
+        <li><a href="#visuals">Making the music visible</a></li>
+        <li><a href="#spatial">Spatial audio</a></li>
+        <li><a href="#perf">Mobile and performance</a></li>
+        <li><a href="#method">Method and tests</a></li>
+      </ol>
+    </nav>
+
+    <h2 id="game">The game</h2>
+    <p>Hyperglide is an anti-gravity racer: six ships, four circuits (a megacity at night, high mountains, a volcanic island, a lunar base), eight teams with distinct handling, weapons, speed pads, loops, corkscrews, tunnels and jumps. It plays with a keyboard, a gamepad or a touch screen, straight in the browser.</p>
+    <p>What sets it apart is elsewhere: <strong>the music does not accompany the race, it takes part in it.</strong> It follows the intensity of the race section by section, lands its drop on the takeoff of a jump, answers the dragons that burst out of the scenery, and becomes a driving mechanic: playing on the beat makes you faster.</p>
+  </div>
+
+  <div class="wide">
+    <div class="gallery">
+      <figure>
+        <img src="img/glacier-vault.webp" width="1600" height="900" loading="lazy" alt="Glacier Vault: racing between ice peaks under a cloudy mauve sky, a red opponent on the left.">
+        <figcaption>Glacier Vault, generated “trance” theme.</figcaption>
+      </figure>
+      <figure>
+        <img src="img/magma-rift.webp" width="1600" height="900" loading="lazy" alt="Magma Rift: the track at dusk between volcanoes, hexagonal lava ground, orange sky.">
+        <figcaption>Magma Rift, “industrial” theme, 156 to 166 BPM.</figcaption>
+      </figure>
+      <figure>
+        <img src="img/selene-orbital.webp" width="1600" height="900" loading="lazy" alt="Selene Orbital: the ship runs along a wall of glowing green hexagons under an aurora.">
+        <figcaption>Selene Orbital, “space” theme.</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <h2 id="architecture">Architecture</h2>
+    <p>The code is TypeScript, bundled with Vite; rendering uses Three.js, the only runtime dependency. Everything else (sequencer, synthesizers, spatialization, physics, AI) is written for the project.</p>
+    <p>The structuring principle is a <strong>strict separation of the simulation</strong>. The track and race code (<code>track/</code>, <code>race/</code>) knows nothing of the DOM, Three.js or Web Audio: it advances in fixed 1/120 s steps and publishes events (overtake, hit, pad, landing, finish). Rendering, audio and UI subscribe to them. A full race can therefore run in Node, without a browser, which makes the physics and rules testable.</p>
+    <p>Each ship lives in the track's frame: <code>s</code>, the distance travelled (accumulated over laps), and <code>x</code>, the lateral offset. The track is a Catmull-Rom spline sampled every 2 m, with a frame per sample (tangent, right, normal) and its yaw and pitch curvatures. In loops and corkscrews the normal points to the figure's axis: the track becomes “magnetic” and holds the ship down.</p>
+  </div>
+
+  <div class="wide">
+    <figure>
+      <p class="scroll-hint" aria-hidden="true">Diagram: scroll sideways →</p>
+      <div class="diagram">
+        <svg viewBox="0 0 960 330" role="img" aria-labelledby="fig1-title fig1-desc">
+          <title id="fig1-title">Game architecture</title>
+          <desc id="fig1-desc">The 120 Hz simulation publishes events to rendering, audio and UI. The music director turns the race into iMUSE commands; the iMUSE engine plays the score to the Web Audio output; MusicPulse feeds the played notes back to the visuals.</desc>
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow"/></marker>
+            <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-acc"/></marker>
+          </defs>
+          <rect class="box" x="20" y="120" width="190" height="90" rx="8"/>
+          <text x="115" y="155" text-anchor="middle" font-size="17" font-weight="700">Simulation</text>
+          <text x="115" y="178" text-anchor="middle" font-size="14" class="muted">track, physics, AI</text>
+          <text x="115" y="197" text-anchor="middle" font-size="14" class="muted">fixed step 120 Hz</text>
+
+          <rect class="box" x="300" y="20" width="190" height="64" rx="8"/>
+          <text x="395" y="48" text-anchor="middle" font-size="16" font-weight="700">Three.js rendering</text>
+          <text x="395" y="69" text-anchor="middle" font-size="13" class="muted">scenery, bloom, camera</text>
+
+          <rect class="box-acc" x="300" y="133" width="190" height="64" rx="8"/>
+          <text x="395" y="161" text-anchor="middle" font-size="16" font-weight="700" class="acc">Music director</text>
+          <text x="395" y="182" text-anchor="middle" font-size="13" class="muted">wishes → hooks</text>
+
+          <rect class="box" x="300" y="246" width="190" height="64" rx="8"/>
+          <text x="395" y="274" text-anchor="middle" font-size="16" font-weight="700">Spatial audio</text>
+          <text x="395" y="295" text-anchor="middle" font-size="13" class="muted">engines, SFX, HRTF</text>
+
+          <rect class="box-acc" x="580" y="133" width="160" height="64" rx="8"/>
+          <text x="660" y="161" text-anchor="middle" font-size="16" font-weight="700" class="acc">iMUSE</text>
+          <text x="660" y="182" text-anchor="middle" font-size="13" class="muted">sequencer, hooks</text>
+
+          <rect class="box" x="790" y="133" width="150" height="64" rx="8"/>
+          <text x="865" y="161" text-anchor="middle" font-size="16" font-weight="700">Web Audio</text>
+          <text x="865" y="182" text-anchor="middle" font-size="13" class="muted">synthesis</text>
+
+          <rect class="box" x="580" y="20" width="160" height="64" rx="8"/>
+          <text x="660" y="48" text-anchor="middle" font-size="16" font-weight="700">MusicPulse</text>
+          <text x="660" y="69" text-anchor="middle" font-size="13" class="muted">notes on audio time</text>
+
+          <path class="ln" d="M210 150 L300 60" marker-end="url(#a1)"/>
+          <path class="ln-acc" d="M210 165 L300 165" marker-end="url(#a2)"/>
+          <path class="ln" d="M210 180 L300 270" marker-end="url(#a1)"/>
+          <text x="236" y="108" font-size="13" class="muted">events</text>
+          <path class="ln-acc" d="M490 165 L580 165" marker-end="url(#a2)"/>
+          <text x="505" y="156" font-size="13" class="acc">setHook</text>
+          <path class="ln-acc" d="M740 165 L790 165" marker-end="url(#a2)"/>
+          <path class="ln" d="M660 133 L660 84" marker-end="url(#a1)"/>
+          <path class="ln" d="M580 52 L490 52" marker-end="url(#a1)"/>
+          <text x="496" y="102" font-size="13" class="muted">spectrum, drops</text>
+          <path class="ln dash" d="M395 84 L395 133" marker-end="url(#a1)"/>
+          <text x="404" y="113" font-size="13" class="muted">dragons</text>
+        </svg>
+      </div>
+      <figcaption>Figure 1. The simulation depends on nothing; everything else subscribes to it. Music flows both ways: the race conducts it, and what it plays animates the scenery.</figcaption>
+    </figure>
+  </div>
+
+  <div class="wrap">
+    <h2 id="imuse">iMUSE, the idea</h2>
+    <p>iMUSE (<em>Interactive Music Streaming Engine</em>) is the interactive music system designed at LucasArts by Michael Land and Peter McConnell in the early 1990s, first used in <em>Monkey Island 2: LeChuck's Revenge</em> (1991) and patented (US 5,315,057). Its core idea is still strikingly relevant:</p>
+    <blockquote>The game never cuts the music. It states a wish; the score decides when that wish becomes musically possible.</blockquote>
+    <p>In practice, the composer writes <strong>conditional branch points</strong> into the score wherever a transition will sound right: end of a phrase, a bar line, a downbeat. The game only sets values. When playback reaches a point whose condition matches the value set, the transition happens: at the right moment, and never in the middle of a note.</p>
+    <p>Hyperglide adopts this model and its vocabulary, based on the technical documentation published by the community (the <a href="https://github.com/meshula/LabMidi/blob/main/LabMuse/imuse-technical.md" rel="noopener" target="_blank">LabMidi / LabMuse</a> repository), and implements it in TypeScript on top of Web Audio, with no MIDI files and no samples.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Concept</th><th>Role in iMUSE</th><th>In Hyperglide</th></tr></thead>
+        <tbody>
+          <tr><td><b>Sound file</b></td><td>The score of a piece</td><td>One theme per circuit, plus the victory and defeat jingles</td></tr>
+          <tr><td><b>Chunk</b></td><td>A sequence played as a block</td><td>9 sections: intro, grid, cruise, build-up, drive, breakdown, final build-up, final, outro</td></tr>
+          <tr><td><b>Part</b></td><td>An instrumental part that can be switched on and off</td><td>About twenty parts: drums, acid bass, sub, pads, arpeggios, melody, the dragons' roar…</td></tr>
+          <tr><td><b>Hook</b></td><td>A conditional branch written in the score</td><td>Classes <code>jump</code>, <code>layer</code>, <code>tension</code>, <code>speed</code>, <code>dragon</code></td></tr>
+          <tr><td><b>Marker + trigger</b></td><td>A command run when playback reaches a marker</td><td>The finish jingle starts exactly at the end of the outro</td></tr>
+          <tr><td><b>Fade, speed, CC</b></td><td>Fades, tempo, MIDI controllers</td><td>Tempo tied to speed, synth brightness (CC74) tied to engine revs</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="engine">The engine in detail</h2>
+    <h3>Musical time and scheduling</h3>
+    <p>Musical time is counted in <strong>ticks</strong>: 480 per quarter note, bars in 4/4. One <code>Player</code> per sound holds an anchor (audio time, tick position) and a cursor into the chunk's sorted event list. Every 25 ms the engine advances each player up to <code>now + 150 ms</code>: notes are handed to Web Audio with their exact time (<code>AudioParam</code> and <code>start(t)</code>), which makes the music independent of the frame rate and immune to main-thread hiccups.</p>
+    <p>A player more than 500 ms late (background tab, throttled timers) resyncs instead of firing all the missed notes at once; lateness is measured on the <em>next</em> event, so a long written rest is not mistaken for lag.</p>
+
+    <h3>Hooks: the score decides</h3>
+    <p>A hook is a score event at a given tick, with a <strong>class</strong>, an <strong>id</strong> and an <strong>action</strong> (jump, enable parts, trim, transpose). The game sets one value per class; when playback reaches the hook, it fires if its id is 0 (unconditional) or equal to the value set. A jump hook is <em>consumed</em>: it does not fire again on the next pass.</p>
+    <pre><code>// score excerpt: CRUISE section (8 bars)
+jumps(b, [4, 8],        { [JUMP.DRIVE]: MAIN.FILL_UP, [JUMP.FINAL]: MAIN.FILL_FINAL });
+jumps(b, [2, 4, 6, 8],  { [JUMP.BREAKDOWN]: MAIN.BREAKDOWN });
+jumps(b, barEnds(8),    { [JUMP.DROP]: MAIN.FILL_UP });   // possible at every bar
+layers(b, ORCHESTRATION);   // LAYER hooks 1 to 4 at bars 0, 2, 4, 6</code></pre>
+    <p>Quantization is therefore a compositional choice: cruise only hands over to drive at the end of a half-phrase (bars 4 and 8), breakdown can kick in every two bars, and the orchestration changes density on phrase boundaries.</p>
+  </div>
+
+  <div class="wide">
+    <figure>
+      <p class="scroll-hint" aria-hidden="true">Diagram: scroll sideways →</p>
+      <div class="diagram">
+        <svg viewBox="0 0 960 300" role="img" aria-labelledby="fig2-title fig2-desc">
+          <title id="fig2-title">Section graph of a theme</title>
+          <desc id="fig2-desc">Intro to grid at every bar, grid to cruise on the start signal. Cruise to build-up then drive at bars 4 and 8; drive back to cruise at bars 4 and 8. Cruise and drive to breakdown every two bars. A DROP jump is possible at every bar of cruise, drive and breakdown into the build-up. Last lap: final build-up with a key change, then final. Finish: outro, and the jingle starts at the end marker.</desc>
+          <defs>
+            <marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow"/></marker>
+            <marker id="b2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-acc"/></marker>
+          </defs>
+          <g font-size="15" font-weight="700" text-anchor="middle">
+            <rect class="box" x="10" y="120" width="90" height="44" rx="8"/><text x="55" y="147">INTRO</text>
+            <rect class="box" x="140" y="120" width="90" height="44" rx="8"/><text x="185" y="147">GRID</text>
+            <rect class="box" x="270" y="120" width="110" height="44" rx="8"/><text x="325" y="147">CRUISE</text>
+            <rect class="box-acc" x="440" y="40" width="110" height="44" rx="8"/><text x="495" y="67" class="acc">FILL_UP</text>
+            <rect class="box" x="610" y="120" width="100" height="44" rx="8"/><text x="660" y="147">DRIVE</text>
+            <rect class="box" x="430" y="215" width="130" height="44" rx="8"/><text x="495" y="242">BREAKDOWN</text>
+            <rect class="box" x="760" y="40" width="130" height="44" rx="8"/><text x="825" y="67">FILL_FINAL</text>
+            <rect class="box" x="775" y="120" width="100" height="44" rx="8"/><text x="825" y="147">FINAL</text>
+            <rect class="box" x="775" y="215" width="100" height="44" rx="8"/><text x="825" y="242">OUTRO</text>
+          </g>
+          <path class="ln" d="M100 142 L140 142" marker-end="url(#b1)"/>
+          <path class="ln" d="M230 142 L270 142" marker-end="url(#b1)"/>
+          <path class="ln-acc" d="M370 120 L445 84" marker-end="url(#b2)"/>
+          <path class="ln-acc" d="M545 84 L620 120" marker-end="url(#b2)"/>
+          <path class="ln" d="M610 150 C 540 172, 450 172, 380 150" marker-end="url(#b1)"/>
+          <path class="ln" d="M360 164 L450 215" marker-end="url(#b1)"/>
+          <path class="ln" d="M630 164 L545 215" marker-end="url(#b1)"/>
+          <path class="ln-acc dash" d="M495 215 L495 84" marker-end="url(#b2)"/>
+          <path class="ln" d="M825 84 L825 120" marker-end="url(#b1)"/>
+          <path class="ln" d="M825 164 L825 215" marker-end="url(#b1)"/>
+          <g font-size="12.5" class="muted">
+            <text x="120" y="112" text-anchor="middle">bar</text>
+            <text x="250" y="112" text-anchor="middle">“GO”</text>
+            <text x="432" y="58" text-anchor="end">DRIVE 4, 8</text>
+            <text x="432" y="76" text-anchor="end" class="acc" font-weight="700">DROP: every bar</text>
+            <text x="452" y="186" text-anchor="middle">CRUISE 4, 8</text>
+            <text x="296" y="200">BREAKDOWN /2</text>
+            <text x="598" y="205">/2</text>
+            <text x="505" y="150" class="acc">DROP</text>
+            <text x="836" y="105">key change</text>
+            <text x="836" y="196">finish</text>
+            <text x="825" y="285" text-anchor="middle">marker → jingle</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Figure 2. The sections of a theme and their transition conditions. Highlighted: the DROP jump, added to time the drop to the circuit (see below).</figcaption>
+    </figure>
+  </div>
+
+  <div class="wrap">
+    <h3>The iMUSE commands, reproduced</h3>
+    <ul>
+      <li><strong>Integer-arithmetic fades at 60 Hz</strong>, like <code>FdFade</code>: an integer slope plus a Bresenham-style remainder accumulator, landing exactly on the target at the last step.</li>
+      <li><strong>Speed</strong> (<code>MdSetSpeed</code>): 128 is the written tempo; tempo is a fadeable parameter like any other.</li>
+      <li><strong>Jump and scan</strong> (<code>MdJump</code>, <code>MdScan</code>): a jump lets sounding notes ring on; a scan replays the settings it passes over (parts, transposition) without playing notes.</li>
+      <li><strong>Deferred commands</strong> on the audio clock (frozen while paused), <strong>triggers</strong> on markers, <strong>volume groups</strong>, a <strong>nested pause counter</strong>, <strong>priorities</strong> (at most four simultaneous sounds; the lowest priority gives way).</li>
+      <li><strong>MIDI controllers</strong>: CC74 (“brightness”) opens the synths' filters.</li>
+    </ul>
+    <p>The output is an interface (<code>MusicOutput</code>): in production, <code>WebAudioOutput</code> creates one bus per sound and per part, with convolution reverb (a procedural 2.8 s impulse response) and delay; in tests, a fake output records the notes. The sequencer is thus tested without a browser.</p>
+
+    <h3>Sixteen instruments, zero samples</h3>
+    <p>Each instrument is a small Web Audio graph built note by note: a pitch-swept kick, snare and hi-hats from filtered noise, an acid bass with glide and a resonant filter, a detuned “reese”, pads, pluck, lead, noise riser, impact, alarm. The dragons' roar (<em>growl</em>) stacks three detuned sawtooths, saturation, a band-pass filter acting as a throat, a rough 31 Hz tremolo and a drop of a fourth at the end of the note.</p>
+
+    <h2 id="director">The music director</h2>
+    <p>The <code>MusicDirector</code> is the only place where the game talks to the music. It observes the race every frame and translates it into <em>wishes</em>:</p>
+    <ul>
+      <li><strong>Intensity</strong>: 55% relative speed, 25% race position, 20% opponents within 60 m, a boost bonus and a rhythm-streak bonus (up to 0.25). It maps to an <strong>orchestration level</strong> from 1 to 4 with hysteresis: a change must be clear-cut (0.13 past the level's center) and hold for 1.5 s.</li>
+      <li><strong>Desired section</strong>: grid during the countdown, cruise or drive by level, breakdown after 2.5 s of lost momentum (big crash, wrong way), final on the last lap.</li>
+      <li><strong>Rhythm layers</strong> by speed: sixteenth-note hats, rolls, syncopated kick, shaker, re-evaluated every bar with a minimum hold of one second.</li>
+      <li><strong>Tempo</strong>: from −5% at a standstill to +8% at top speed, +5% when boosting, ×1.04 on the last lap, through small fades.</li>
+      <li><strong>Brightness</strong>: CC74 sent every 100 ms to the filtered synths, from 36 to 116 with speed.</li>
+      <li><strong>Accents</strong>: when hit by a weapon, the music “takes the blow” (volume down to 64 in 80 ms, back in 1.5 s, via a deferred command).</li>
+    </ul>
+    <p>The finish follows iMUSE's end-of-combat pattern exactly: the director enables the jump to the outro and hooks the jingle's start, transposed to the current key, onto the outro's end marker. The jingle therefore starts right on the bar, wherever the music happened to be when the line was crossed.</p>
+
+    <figure>
+      <img src="img/banc-musique.jpg" width="1600" height="900" loading="lazy" alt="In-game capture with the debug panel open on the right: a music section with a seed picker, acoustic toggles, sound-effect triggers and a radar of sound reflections.">
+      <figcaption>The test bench (F2 key): change the theme's seed mid-race, toggle each acoustic effect, see sound reflections on the radar.</figcaption>
+    </figure>
+
+    <h2 id="score">The track as a score</h2>
+    <p>The director above makes the music <em>reactive</em>. A good demo does better: music and image have an appointment. In Hyperglide, the circuit's big moments, the <strong>takeoff of a jump</strong> and the <strong>exit of a long tunnel</strong>, are musical appointments. The drop (the end of a one-bar build-up, the entry into the DRIVE section) must land the instant the player gets there, on every lap, whatever their speed.</p>
+    <p>The difficulty: the player moves in real time at a speed of their choosing, while the music moves in bars and can only jump at bar lines. As when syncing a demo to its soundtrack, two levers are combined.</p>
+
+    <h3>1. Appointments read from the geometry</h3>
+    <p>The appointments are extracted from the track: for a jump, the takeoff point is the first sample whose pitch curvature reaches 60% of the crest's (the ship lifts off before the top); for a tunnel of at least 220 m, its exit. Two appointments less than 700 m apart are merged in favor of the jump. Tunnels leading to an appointment become <strong>breakdowns</strong>: the music holds back in the tunnel and explodes at the exit.</p>
+
+    <h3>2. Pick the bar, then adjust the tempo</h3>
+    <p>Fourteen seconds before the appointment, the director takes over the tempo. It estimates the arrival time (distance, speed and, while the ship is still gaining speed, its acceleration capped at top speed), then enumerates the candidate bar lines: for each, the tempo factor that would make the drop land on time. It keeps the bar requiring the least change, within 0.90 to 1.16 times the written tempo, and <strong>sticks to it</strong> as long as it stays reachable: without that lock, speed variations would make the choice flip from one bar to another.</p>
+    <pre><code>// for bar n (0 = the next one):
+beats_to_bar = (4 − position_in_bar) + 4·n
+factor = (beats_to_bar + 4) / (eta × nominal_tempo)   // +4: the build-up lasts one bar</code></pre>
+    <p>The <code>DROP</code> jump is possible at every bar; the director only sets the hook when the next bar the sequencer will read is the right one, then, during the build-up bar, only fine-tunes the tempo to absorb the last speed changes.</p>
+  </div>
+
+  <div class="wide">
+    <figure>
+      <p class="scroll-hint" aria-hidden="true">Diagram: scroll sideways →</p>
+      <div class="diagram">
+        <svg viewBox="0 0 960 300" role="img" aria-labelledby="fig3-title fig3-desc">
+          <title id="fig3-title">Three clocks</title>
+          <desc id="fig3-desc">The sequencer schedules 150 milliseconds ahead of the audio clock, and the player hears with an output delay and a calibrated delay. The DROP hook must be set before the sequencer reaches the target bar; to know this, the sequencer's bar is compared to the heard bar.</desc>
+          <defs>
+            <marker id="c1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-acc"/></marker>
+          </defs>
+          <g font-size="14">
+            <text x="20" y="62" font-weight="700">Sequencer</text><text x="20" y="80" class="muted">schedules +150 ms ahead</text>
+            <text x="20" y="142" font-weight="700">Audio clock</text><text x="20" y="160" class="muted">currentTime</text>
+            <text x="20" y="222" font-weight="700">What the player hears</text><text x="20" y="240" class="muted">− latency − calibration</text>
+          </g>
+          <g class="ln">
+            <line x1="220" y1="70" x2="940" y2="70"/><line x1="220" y1="150" x2="940" y2="150"/><line x1="220" y1="230" x2="940" y2="230"/>
+          </g>
+          <g stroke-width="1.5" class="ln dash">
+            <line x1="420" y1="40" x2="420" y2="255"/><line x1="660" y1="40" x2="660" y2="255"/><line x1="900" y1="40" x2="900" y2="255"/>
+          </g>
+          <g font-size="13" class="muted" text-anchor="middle">
+            <text x="420" y="32">bar k</text><text x="660" y="32">bar k+1: jump</text><text x="900" y="32">drop</text>
+          </g>
+          <circle cx="560" cy="70" r="7" class="arrow-acc"/>
+          <circle cx="480" cy="150" r="7" class="arrow"/>
+          <circle cx="430" cy="230" r="7" class="arrow"/>
+          <text x="560" y="98" font-size="13" text-anchor="middle" class="acc">sequencer position</text>
+          <text x="480" y="178" font-size="13" text-anchor="middle" class="muted">now</text>
+          <text x="430" y="258" font-size="13" text-anchor="middle" class="muted">heard</text>
+          <rect x="560" y="58" width="100" height="24" rx="4" fill="none" class="ln-acc"/>
+          <text x="610" y="118" font-size="13" text-anchor="middle" class="acc">hook set here → jump at k+1</text>
+          <path class="ln-acc" d="M660 230 L900 230" marker-end="url(#c1)"/>
+          <text x="780" y="218" font-size="13" text-anchor="middle" class="acc">one build-up bar</text>
+        </svg>
+      </div>
+      <figcaption>Figure 3. The hook must be set before the sequencer, which runs ahead of what is heard, reaches the target bar. Rather than estimating that lead, the director compares the sequencer's bar with the heard bar: both clocks refer to the same section.</figcaption>
+    </figure>
+  </div>
+
+  <div class="wrap">
+    <h3>3. Two clocks that don't quite tick together</h3>
+    <p>The game runs on real time (<code>requestAnimationFrame</code>), the music on audio time (<code>AudioContext.currentTime</code>), driven by the sound card. On some outputs the two drift apart by several percent. The director continuously measures the ratio between the two clocks and converts the player's arrival time into audio time before planning.</p>
+    <figure>
+      <img src="img/tremplin.webp" width="1600" height="900" loading="lazy" alt="The player's ship above the Neon Ridge city, between lit buildings and golden light bars.">
+      <figcaption>Neon Ridge, above the city.</figcaption>
+    </figure>
+    <div class="note"><b>Measured, not assumed.</b> With the autopilot at steady speed, the drop lands within 0.01–0.03 s of the actual takeoff. When speed changes sharply in the last second (pad, crash) or the tempo range is exhausted, the gap grows to 0.3–0.5 s. The sync is covered by tests that simulate the decision frame by frame, including a player who accelerates during the approach.</div>
+
+    <h2 id="rhythm">Rhythm as a driving mechanic</h2>
+    <p>A rhythm key (Shift, Y on a gamepad, the ♪ button on touch screens) pressed <strong>on the beat</strong> gives a boost that grows with the streak, up to ×8, with a bonus on the downbeat. Off the beat, it costs a little speed and breaks the streak. Crossing a speed pad or landing on the beat also scores. The streak feeds back into the music's intensity: playing in time lifts the orchestration.</p>
+    <ul>
+      <li><strong>Judgment windows</strong>: perfect within ±55 ms, good within ±110 ms, widened by 40% for passive actions (pad, landing). Only one press counts per beat: mashing earns nothing.</li>
+      <li><strong>Judged at the heard instant</strong>: the press is timestamped in the event handler, on the audio clock minus the reported output latency and the calibrated delay, not at the next frame. This change brought the measured median error down from 59 ms to 5 ms.</li>
+      <li><strong>Balance</strong>: drag pulls speed back toward top speed at about 0.33/s, so a boost on every beat accumulates. Boosts are sized so that a perfect streak held throughout is worth about <strong>+3%</strong> distance; a test keeps the advantage between +2% and +6%.</li>
+      <li><strong>Opponents groove too</strong>: on each beat, each AI plays with a probability of 30% (novice), 55% (pro) or 80% (elite).</li>
+    </ul>
+    <h3>Calibration</h3>
+    <p>Wireless headphones, TVs, reflexes: every setup has its own delay, and the latency reported by the browser often underestimates it. A calibration screen plays a 120 BPM metronome; after four listening clicks, the player taps sixteen times. The median delay, robust to stray taps (beyond 200 ms), is stored and applied to judgment as well as to music sync. The measurement uses exactly the clock that judges in-race: with a simulated player tapping 120 ms after each click, the screen measures 121 ms.</p>
+
+    <h2 id="generation">One soundtrack per circuit</h2>
+    <p>Neon Ridge has a hand-written theme. The other three circuits have a theme <strong>generated from a seed</strong> and a style, with the same contract of sections and hooks: the director conducts any theme without knowing it.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Style</th><th>Tempo</th><th>Modes</th><th>Color</th></tr></thead>
+        <tbody>
+          <tr><td>Breakbeat</td><td>146–154</td><td>minor, dorian</td><td>breaks, acid bass</td></tr>
+          <tr><td>Trance</td><td>138–146</td><td>minor, dorian, harmonic</td><td>delayed plucks, wide pads</td></tr>
+          <tr><td>Industrial</td><td>156–166</td><td>phrygian, harmonic, minor</td><td>saturated acid, syncopated kick</td></tr>
+          <tr><td>Space</td><td>132–142</td><td>dorian, harmonic</td><td>reese bass, long reverb</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The generator (a <em>mulberry32</em> PRNG) draws a key, a mode, an eight-bar progression whose last bar is always the dominant (made major, for a true leading tone), drum patterns with ghost notes, an acid bass as a random walk, then the melody. The melody is composed as a phrase, not as a string of notes: a one-bar motif (rhythm and contour), repeated, varied, then contrasted, in the form <strong>A A′ B cadence | A A″ C cadence on the leading tone</strong>. Downbeats always land on a chord tone. The test bench lets you audition other seeds mid-race to pick them by ear.</p>
+
+    <h2 id="visuals">Making the music visible</h2>
+    <p>For the scenery to follow the music to the millisecond, there is no need to analyze the output sound: every note is already known. <code>MusicPulse</code> sits between the sequencer and the output, records each note with its audio time, and returns per-frame envelopes per instrument family, a six-band “musical” spectrum with automatic gain control, and the tempo clock.</p>
+    <ul>
+      <li><strong>Staging per section</strong>, demoscene-style: each section is a scene with its own dynamics; build-ups hold back and darken; every heard section change is a hard cut (flash, palette, ground pattern). In tight corners the scenery fades to let the track read clearly.</li>
+      <li><strong>Hexagonal ground</strong> of columns, animated in spirals, rings or sectors depending on the section; the columns along the track stay calm for readability.</li>
+      <li><strong>Sky</strong>: fractal-noise clouds, four plasma clouds each tied to a band, planets that vibrate with the sound and rings that ripple on the kick.</li>
+      <li><strong>Procedural dragons</strong> burst out of the ground on drops; while they are out, the <code>dragon</code> hook brings their roar in at the next bar. The music animates the scenery, and the scenery writes into the music.</li>
+    </ul>
+
+    <h2 id="spatial">Spatial audio</h2>
+    <p>Engines and sound effects are also synthesized and spatialized (HRTF panning, Doppler), with acoustics computed from the circuit's geometry:</p>
+    <ul>
+      <li><strong>Image-source early reflections</strong> off the left wall, the right wall and tunnel ceilings: delay (2 to 40 ms), absorption and impact position. Skimming a wall, the reflection drops to 3 or 4 ms: you hear the comb filtering shift with distance.</li>
+      <li><strong>Colonnades</strong>: each pillar is a point scatterer, hence a <em>flutter echo</em> every 12 m.</li>
+      <li><strong>Tunnels</strong>: convolution reverb whose send follows each source's enclosure, a bass boost, and <strong>occlusion</strong> of an opponent heard from outside.</li>
+    </ul>
+
+    <h2 id="perf">Mobile and performance</h2>
+    <figure>
+      <img src="img/mobile.jpg" width="915" height="412" loading="lazy" alt="The game on a phone held in landscape: speedometer, touch buttons for brake, airbrakes, weapon and the rhythm key.">
+      <figcaption>On a phone, in landscape: steering under the left thumb, brake, airbrakes, weapon and the ♪ rhythm key on the right.</figcaption>
+    </figure>
+    <p>The game detects touch screens, shows its controls and switches to a lighter quality (1× resolution, half-resolution bloom, simplified sky). On every device the quality <strong>adapts by itself</strong>: if the average frame time exceeds 22 ms over a 3 s window, it drops one tier (lighter sky rendered separately at low resolution, then half-resolution bloom, then reduced resolution), and never climbs back during a race to avoid oscillation. The first five seconds, spent compiling shaders, don't count.</p>
+    <p>A measurement lesson: rendering the sky at half resolution looked like an obvious win. Measured on a desktop GPU at 1080p, the extra pass costs as much as it saves; so it is only enabled where fill rate is the bottleneck, on mobile and at the first downgrade tier.</p>
+
+    <h2 id="method">Method and tests</h2>
+    <p>140 automated tests cover the track geometry, physics, full races between AIs, the iMUSE sequencer (with a fake output), the soundtrack (every theme runs through all its sections and every hook enters and leaves on the bar), melody generation (repeated motif, cadences, chord tones on downbeats), staging, drop sync, rhythm judgment, balance and adaptive quality.</p>
+    <p>What tests cannot see is checked in a real browser by automated probes: driving the game, pressing the rhythm key on heard beats, measuring the gap between drop and takeoff, emulating a phone in landscape and portrait, capturing the frame right after a render. The figures in this article come from them.</p>
+
+    <div class="cta" style="margin:36px 0 8px">
+      <a class="btn" href="../">Play Hyperglide</a>
+    </div>
+  </div>
+</article>
+</main>
+
+<footer class="author">
+  <div class="wrap">
+    <h2>About the author</h2>
+    <p><strong>Pierre-Emmanuel Gros</strong> designed and built Hyperglide: game design, the interactive music engine, audio synthesis, rendering and test tooling. To talk about the project, interactive music or a collaboration: <a href="https://www.linkedin.com/in/pierre-emmanuel-gros-ph-d-b337113/" rel="author noopener" target="_blank">LinkedIn profile</a>.</p>
+    <p class="small">The game's interface is in French. Hyperglide is an original creation. iMUSE is a system designed by LucasArts; it is cited here as a technical inspiration.</p>
+  </div>
+</footer>
+
+</body>
+</html>

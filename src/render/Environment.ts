@@ -135,6 +135,20 @@ export class Environment {
     this.stage.cut = Math.max(this.stage.cut, 0.55 * strength);
   }
 
+  /**
+   * Facteur de bloom voulu (1 = réglage de base) : retenu dans les passages calmes et en virage
+   * serré (la piste doit rester lisible), ouvert sur les drops et les coupes.
+   */
+  get bloom(): number {
+    const st = this.stage;
+    return (0.7 + 0.4 * st.intensity) * (1 - 0.35 * st.focus) + 0.3 * st.cut;
+  }
+
+  /** Dôme du ciel (rendu à part, en basse définition). */
+  get skyDome(): Object3D {
+    return this.musicSky.mesh;
+  }
+
   /** Des dragons sont hors du sol. */
   get dragonsActive(): boolean {
     return this.dragons.active;
